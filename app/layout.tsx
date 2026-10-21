@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://prorouter.in"),
+  metadataBase: new URL("https://prorouter.com"),
   title: {
     default: "ProRouter — One API. Every Model.",
     template: "%s · ProRouter",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ProRouter — One API. Every Model.",
     description: "One API, one wallet, one dashboard. Route across every AI provider with automatic fallback.",
-    url: "https://prorouter.in",
+    url: "https://prorouter.com",
     siteName: "ProRouter",
     type: "website",
   },

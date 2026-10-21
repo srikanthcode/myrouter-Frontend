@@ -5,7 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Badge, CopyButton } from "@/components/ui";
 import { fetchJson } from "@/lib/server-api";
 
-const curlExample = `curl https://prorouter.in/v1/chat/completions \\
+const curlExample = `curl https://api.prorouter.com/v1/chat/completions \\
   -H "Authorization: Bearer $PROROUTER_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -20,7 +20,7 @@ const sdkExample = `import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.PROROUTER_API_KEY,
-  baseURL: "https://prorouter.in/v1",
+  baseURL: "https://api.prorouter.com/v1",
 });
 
 const stream = await client.chat.completions.create({
@@ -38,7 +38,7 @@ const faqs = [
   { q: "Do I need separate accounts with each provider?", a: "No. You integrate once with ProRouter. We handle provider selection, credentials, retries, fallback and normalized errors behind a single endpoint." },
   { q: "How does model access work?", a: "Every model in the catalogue is reached through the same OpenAI-compatible endpoint, subject to platform rate limits and a real request queue. Limits and queue priority are configurable per plan." },
   { q: "How am I charged for paid models?", a: "Paid models are billed per million input and output tokens from your ProRouter wallet. Pricing is shown before you send a request, and every deduction appears as an immutable wallet transaction." },
-  { q: "Is the API OpenAI-compatible?", a: "Yes. Point the official OpenAI SDK at https://prorouter.in/v1 and your existing code keeps working — including streaming, tool calls and JSON mode." },
+  { q: "Is the API OpenAI-compatible?", a: "Yes. Point the official OpenAI SDK at https://api.prorouter.com/v1 and your existing code keeps working — including streaming, tool calls and JSON mode." },
   { q: "What happens if a provider goes down?", a: "The routing engine monitors provider health and automatically falls back to the next healthy provider for your model, so you keep getting successful responses." },
 ];
 

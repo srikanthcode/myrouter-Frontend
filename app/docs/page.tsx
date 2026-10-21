@@ -42,7 +42,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-const quickstart = `curl https://api.prorouter.com/v1/chat/completions \\
+const quickstart = `curl https://prorouter.in/v1/chat/completions \\
   -H "Authorization: Bearer $PROROUTER_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -54,7 +54,7 @@ const sdk = `import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.PROROUTER_API_KEY,
-  baseURL: "https://api.prorouter.com/v1",
+  baseURL: "https://prorouter.in/v1",
 });
 
 const res = await client.chat.completions.create({

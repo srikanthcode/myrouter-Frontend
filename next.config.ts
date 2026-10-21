@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
-const API_BASE = process.env.API_BASE_URL || "http://localhost:4000";
+// The API runs beside the web app in production (see scripts/start-prod.mjs),
+// so the default target is loopback. This value is baked in at build time —
+// set API_BASE_URL before `next build` if the API is hosted elsewhere.
+const API_BASE = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@uno/shared", "@uno/database", "@uno/routing", "@uno/providers"],

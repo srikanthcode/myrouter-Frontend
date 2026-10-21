@@ -36,22 +36,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#020617" },
-    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
-  ],
+  themeColor: "#f8fafc",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`light ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         {/* Runs before first paint so the saved theme applies without a flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("prorouter-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}var r=document.documentElement;r.classList.toggle("light",t==="light");r.classList.toggle("dark",t==="dark")}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("prorouter-theme");if(t!=="light"&&t!=="dark"){t="light"}var r=document.documentElement;r.classList.toggle("light",t==="light");r.classList.toggle("dark",t==="dark")}catch(e){}})()`,
           }}
         />
       </head>

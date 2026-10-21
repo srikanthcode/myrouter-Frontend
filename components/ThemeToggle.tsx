@@ -13,7 +13,7 @@ function readTheme(): "dark" | "light" {
   } catch {
     /* private mode */
   }
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return "light";
 }
 
 function applyTheme(theme: "dark" | "light") {
@@ -29,7 +29,7 @@ function applyTheme(theme: "dark" | "light") {
  * sync and re-applies the class when React remounts <html> in development.
  */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useLayoutEffect(() => {
     const initial = readTheme();

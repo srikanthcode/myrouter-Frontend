@@ -59,6 +59,10 @@ export default function KeysPage() {
     try {
       const res = await api<{ key: ApiKey; secret: string }>(`/keys/${key.id}/rotate`, { method: "POST" });
       setSecret({ name: res.key.name, value: res.secret, rotated: true });
+      try {
+        window.localStorage.setItem("prorouter_playground_key", res.secret);
+        window.localStorage.setItem("prorouter_api_key", res.secret);
+      } catch {}
       await load();
     } catch (e) {
       toast.push(e instanceof ApiError ? e.message : "Could not rotate the key.", "error");
@@ -170,6 +174,10 @@ export default function KeysPage() {
         onCreated={(name, value) => {
           setCreateOpen(false);
           setSecret({ name, value, rotated: false });
+          try {
+            window.localStorage.setItem("prorouter_playground_key", value);
+            window.localStorage.setItem("prorouter_api_key", value);
+          } catch {}
           void load();
           void refresh();
         }}

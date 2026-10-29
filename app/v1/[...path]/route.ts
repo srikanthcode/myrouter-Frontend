@@ -112,7 +112,7 @@ async function proxyV1(req: NextRequest, path: string[]) {
       id: m.slug,
       object: "model",
       created: 1710000000,
-      owned_by: m.provider.slug,
+      owned_by: m.providerSlug,
     }));
     return NextResponse.json({ object: "list", data: list }, {
       headers: { "access-control-allow-origin": "*" },

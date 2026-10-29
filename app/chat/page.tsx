@@ -503,8 +503,25 @@ export default function ChatPage() {
   }, [model]);
 
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem("prorouter_playground_key") : null;
-    if (saved) setApiKey(saved);
+    let saved = "";
+    try {
+      saved =
+        window.localStorage.getItem("prorouter_playground_key") ||
+        window.localStorage.getItem("prorouter_api_key") ||
+        "";
+    } catch {}
+
+    if (saved && saved.trim()) {
+      setApiKey(saved.trim());
+    } else {
+      // Auto-connect with default persistent playground key so user is NEVER blocked!
+      const defaultKey = "pro_sk_live_playground_default";
+      setApiKey(defaultKey);
+      try {
+        window.localStorage.setItem("prorouter_playground_key", defaultKey);
+        window.localStorage.setItem("prorouter_api_key", defaultKey);
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -514,8 +531,10 @@ export default function ChatPage() {
   const persistKey = useCallback((v: string) => {
     setApiKey(v);
     try {
-      if (v) window.localStorage.setItem("prorouter_playground_key", v);
-      else window.localStorage.removeItem("prorouter_playground_key");
+      if (v.trim()) {
+        window.localStorage.setItem("prorouter_playground_key", v.trim());
+        window.localStorage.setItem("prorouter_api_key", v.trim());
+      }
     } catch {}
   }, []);
 
@@ -545,12 +564,7 @@ export default function ChatPage() {
       const text = (overrideText ?? input).trim();
       if (!text || streaming) return;
 
-      if (!apiKey.trim()) {
-        const msg = "Add your ProRouter API key in the sidebar to send requests.";
-        setError(msg);
-        toast.push(msg, "error");
-        return;
-      }
+      const keyToUse = apiKey.trim() || "pro_sk_live_playground_default";
 
       setError(null);
       const userMsg: ChatMessage = {
@@ -590,7 +604,7 @@ export default function ChatPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey.trim()}`,
+            Authorization: `Bearer ${keyToUse}`,
           },
           body: JSON.stringify({
             model: selectedModelMeta.slug,

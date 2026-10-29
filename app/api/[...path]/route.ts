@@ -6,9 +6,15 @@ export const runtime = "nodejs";
 
 const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 
+let lastBackendFailureTime = 0;
+const BACKEND_FAILURE_COOLDOWN_MS = 45_000; // 45 seconds cooldown after backend down/timeout
+const PROXY_TIMEOUT_MS = 2500; // 2.5 seconds timeout
+
 async function proxyRequest(req: NextRequest, path: string[]) {
-  // If an external backend is explicitly configured, try proxying to it first
-  if (BACKEND_BASE && !BACKEND_BASE.includes("127.0.0.1") && !BACKEND_BASE.includes("localhost")) {
+  const isCooldownActive = Date.now() - lastBackendFailureTime < BACKEND_FAILURE_COOLDOWN_MS;
+
+  // If an external backend is configured and cooldown is not active, try backend
+  if (BACKEND_BASE && !BACKEND_BASE.includes("127.0.0.1") && !BACKEND_BASE.includes("localhost") && !isCooldownActive) {
     const subpath = path.join("/");
     const search = req.nextUrl.search || "";
     const targetUrl = `${BACKEND_BASE}/${subpath}${search}`;
@@ -34,7 +40,7 @@ async function proxyRequest(req: NextRequest, path: string[]) {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s quick check
+    const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
     try {
       const backendRes = await fetch(targetUrl, {
@@ -50,6 +56,7 @@ async function proxyRequest(req: NextRequest, path: string[]) {
 
       // If backend responded with a healthy JSON response, return it directly!
       if (backendRes.ok && contentType.includes("application/json")) {
+        lastBackendFailureTime = 0; // Backend is healthy
         const resHeaders = new Headers();
         backendRes.headers.forEach((val: string, key: string) => {
           const k = key.toLowerCase();
@@ -71,10 +78,13 @@ async function proxyRequest(req: NextRequest, path: string[]) {
           statusText: backendRes.statusText,
           headers: resHeaders,
         });
+      } else if (backendRes.status >= 500) {
+        // Backend returned 502/503/504
+        lastBackendFailureTime = Date.now();
       }
     } catch {
       clearTimeout(timeoutId);
-      /* Fallback gracefully below */
+      lastBackendFailureTime = Date.now();
     }
   }
 
@@ -105,15 +115,4 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ pa
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
   const { path } = await Promise.resolve(params);
   return proxyRequest(req, path || []);
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id",
-    },
-  });
 }

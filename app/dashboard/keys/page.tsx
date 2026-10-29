@@ -32,7 +32,7 @@ export default function KeysPage() {
   const load = useCallback(async () => {
     try {
       const res = await api<{ items: ApiKey[] }>("/keys");
-      setKeys(res.items);
+      setKeys(Array.isArray(res?.items) ? res.items : Array.isArray(res) ? (res as unknown as ApiKey[]) : []);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your API keys.");

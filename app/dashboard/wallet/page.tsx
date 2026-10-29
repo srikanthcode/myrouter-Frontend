@@ -70,8 +70,8 @@ export default function WalletPage() {
         api<{ items: Payment[] }>("/payments"),
       ]);
       setWallet(w);
-      setPackages(p.items);
-      setPayments(pay.items);
+      setPackages(Array.isArray(p?.items) ? p.items : Array.isArray(p) ? (p as unknown as Package[]) : []);
+      setPayments(Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : []);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your wallet.");

@@ -132,7 +132,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!me) return;
-    api<{ items: typeof notifs }>("/notifications").then((d) => setNotifs(d.items)).catch(() => {});
+    api<{ items: typeof notifs }>("/notifications").then((d) => setNotifs(Array.isArray(d?.items) ? d.items : Array.isArray(d) ? (d as any) : [])).catch(() => setNotifs([]));
   }, [me?.user.id]);
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const unread = notifs.filter((n) => !n.readAt).length;
+  const unread = (notifs || []).filter((n) => !n?.readAt).length;
   const initials = (me?.user.name?.trim() || me?.user.email || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const current = nav.flatMap((s) => s.items.map((i) => ({ ...i, section: s.section }))).find((i) => isActivePath(pathname, i.href));
 
@@ -249,10 +249,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               )}
               <div className="hidden items-center gap-2 xl:flex">
                 {me?.plan && <Badge tone="neutral">{me.plan.name} plan</Badge>}
-                {me?.astra.active && (
+                {me?.astra?.active && (
                   <Badge tone="accent">
                     <Sparkles className="size-3" aria-hidden="true" />
-                    Astra · {me.astra.expiresAt ? `${Math.max(0, Math.ceil((new Date(me.astra.expiresAt).getTime() - Date.now()) / 86400000))}d left` : "active"}
+                    Astra · {me.astra?.expiresAt ? `${Math.max(0, Math.ceil((new Date(me.astra.expiresAt).getTime() - Date.now()) / 86400000))}d left` : "active"}
                   </Badge>
                 )}
               </div>

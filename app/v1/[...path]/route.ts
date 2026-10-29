@@ -491,6 +491,20 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id, X-Requested-With, baggage, sentry-trace, *",
 };
 
+// ── Clean markdown bold/asterisks around names so model never replies with **Name** ──
+function stripAsterisksAroundName(text: string, name: string, owner?: string): string {
+  if (!text) return text;
+  let res = text
+    .replaceAll(`**${name}**`, name)
+    .replaceAll(`*${name}*`, name);
+  if (owner) {
+    res = res
+      .replaceAll(`**${owner}**`, owner)
+      .replaceAll(`*${owner}*`, owner);
+  }
+  return res;
+}
+
 // ── Stream helper for TokenJuice DeepSeek V4.1 ──
 async function streamTokenJuice(
   controller: ReadableStreamDefaultController,
@@ -500,7 +514,9 @@ async function streamTokenJuice(
   createdTimestamp: number,
   requestedRawModel: string,
   effectiveMessages: unknown[],
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  modelDisplayName: string,
+  owner?: string
 ) {
   const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
   const upstreamBody = {
@@ -551,7 +567,8 @@ async function streamTokenJuice(
       if (done) break;
 
       const raw = decoder.decode(value, { stream: true });
-      const mapped = raw.replaceAll(TOKENJUICE_MODEL, requestedRawModel);
+      let mapped = raw.replaceAll(TOKENJUICE_MODEL, requestedRawModel);
+      mapped = stripAsterisksAroundName(mapped, modelDisplayName, owner);
       controller.enqueue(encoder.encode(mapped));
     }
 
@@ -625,7 +642,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     // Identity handling:
     // If the client (Cline, Claude Code, etc.) has its own system message, preserve it 100% untouched!
     // If NO system message was provided (e.g. web playground or simple curl chat), supply the model's true name
-    // so it naturally introduces itself as Kimi K2.7 Code, GLM-5.3, etc. instead of generic OpenAI ChatGPT!
+    // in natural plain text without asterisks or bold markdown!
     const incomingMessages = Array.isArray(payload.messages) ? [...payload.messages] : [];
     const hasSystemMessage = incomingMessages.some(
       (m: unknown) =>
@@ -639,11 +656,12 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       (m) => m.id.toLowerCase() === requestedRawModel.toLowerCase()
     );
     const modelDisplayName = activeMeta ? activeMeta.name : requestedRawModel;
+    const ownerName = activeMeta?.owned_by;
 
     let effectiveMessages = incomingMessages;
     if (!hasSystemMessage) {
-      const modelOwner = activeMeta?.owned_by ? ` (developed by ${activeMeta.owned_by})` : "";
-      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, an advanced AI model. When asked who you are, what model you are, or what your name is, state clearly and naturally that you are ${modelDisplayName}. Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
+      const modelOwner = ownerName ? ` (developed by ${ownerName})` : "";
+      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, an advanced AI model. When asked who you are, what model you are, or what your name is, introduce yourself naturally in plain text without using markdown bold or asterisks (never wrap your name or company in ** or *). Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
       effectiveMessages = [
         { role: "system", content: systemPrompt },
         ...incomingMessages,
@@ -707,8 +725,9 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                   }
                   try {
                     const parsed = JSON.parse(trimmed.slice(5).trim());
-                    const content = parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.message?.content ?? "";
+                    let content = parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.message?.content ?? "";
                     if (content) {
+                      content = stripAsterisksAroundName(content, modelDisplayName, ownerName);
                       const chunk = `data: ${JSON.stringify({
                         id: reqId,
                         object: "chat.completion.chunk",
@@ -727,13 +746,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               return;
             } catch {
               // Seamless fallback to TokenJuice if freemodels worker is unreachable
-              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload);
+              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, modelDisplayName, ownerName);
               return;
             }
           }
 
           // ── Option 2: All Other Models -> TokenJuice DeepSeek V4.1 Engine ──
-          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload);
+          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, modelDisplayName, ownerName);
         },
       });
 
@@ -766,7 +785,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
         if (upstreamRes.ok) {
           const data = await upstreamRes.json();
-          const content = data.content || data.response || data.choices?.[0]?.message?.content || "";
+          let content = data.content || data.response || data.choices?.[0]?.message?.content || "";
+          content = stripAsterisksAroundName(content, modelDisplayName, ownerName);
           return NextResponse.json(
             {
               id: reqId,
@@ -816,6 +836,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         const data = await upstreamRes.json();
         if (data && typeof data === "object") {
           data.model = requestedRawModel;
+          if (Array.isArray(data.choices)) {
+            for (const choice of data.choices) {
+              if (choice?.message?.content && typeof choice.message.content === "string") {
+                choice.message.content = stripAsterisksAroundName(choice.message.content, modelDisplayName, ownerName);
+              }
+            }
+          }
         }
         return NextResponse.json(data, { status: 200, headers: CORS_HEADERS });
       }

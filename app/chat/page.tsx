@@ -411,16 +411,16 @@ function MessageContent({ text, isStreaming }: { text: string; isStreaming?: boo
   }, [cleaned]);
 
   return (
-    <div className="space-y-2.5 leading-relaxed">
+    <div className="space-y-2 leading-relaxed text-[12px]">
       {parts.map((part, index) => {
         if (part.type === "code") {
           return <CodeSnippet key={index} code={part.content} lang={part.lang} />;
         }
         return (
-          <div key={index} className="whitespace-pre-wrap break-words text-[13.5px]">
+          <div key={index} className="whitespace-pre-wrap break-words text-[12px]">
             {part.content}
             {isStreaming && index === parts.length - 1 && (
-              <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-accent align-middle" />
+              <span className="inline-block size-1.5 ml-1 rounded-full bg-accent animate-pulse align-middle" />
             )}
           </div>
         );
@@ -440,8 +440,8 @@ function CodeSnippet({ code, lang }: { code: string; lang?: string }) {
   };
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-line bg-[#030612] text-[12px]">
-      <div className="flex items-center justify-between border-b border-line bg-panel2/60 px-3 py-1 text-[10.5px] font-mono text-mut2">
+    <div className="my-1.5 overflow-hidden rounded-md border border-line bg-[#030612] text-[11.5px]">
+      <div className="flex items-center justify-between border-b border-line bg-panel2/60 px-2.5 py-1 text-[9.5px] font-mono text-mut2">
         <span className="font-semibold uppercase tracking-wider text-accent">
           {lang || "code"}
         </span>
@@ -450,11 +450,11 @@ function CodeSnippet({ code, lang }: { code: string; lang?: string }) {
           className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-mut transition-colors duration-150 hover:bg-white/[0.08] hover:text-fg"
           aria-label="Copy code snippet"
         >
-          {copied ? <Check className="size-2.5 text-good" /> : <Copy className="size-2.5" />}
+          {copied ? <Check className="size-2 text-good" /> : <Copy className="size-2" />}
           <span>{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-[12px] leading-relaxed text-fg/90">
+      <pre className="overflow-x-auto p-2.5 font-mono text-[11.5px] leading-relaxed text-fg/90">
         <code>{code}</code>
       </pre>
     </div>
@@ -798,34 +798,34 @@ export default function ChatPage() {
             {/* Conversation Feed */}
             <div
               ref={scrollRef}
-              className="flex-1 min-h-0 space-y-3 overflow-y-auto p-3 sm:p-3.5"
+              className="flex-1 min-h-0 space-y-2.5 overflow-y-auto p-2.5 sm:p-3"
               aria-live="polite"
               aria-label="Conversation Feed"
             >
               {messages.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center py-6 text-center">
+                <div className="flex h-full flex-col items-center justify-center py-5 text-center">
                   <div className="max-w-md px-2">
-                    <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-panel2 px-2.5 py-0.5 font-mono text-[10.5px] text-mut mb-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-panel2 px-2.5 py-0.5 font-mono text-[10px] text-mut mb-1.5">
                       <span className="size-1.5 rounded-full bg-accent" />
                       <span>{selectedModelMeta.provider}</span>
                       <span className="text-line2">·</span>
                       <span>{selectedModelMeta.context}</span>
                     </div>
 
-                    <h2 className="text-sm font-semibold text-fg tracking-tight">
+                    <h2 className="text-[13px] font-semibold text-fg tracking-tight">
                       Chat with {selectedModelMeta.name}
                     </h2>
-                    <p className="mt-1 text-[11.5px] leading-relaxed text-mut">
+                    <p className="mt-1 text-[11px] leading-relaxed text-mut">
                       {selectedModelMeta.description}
                     </p>
 
-                    {/* Clean Starter prompt pills (NO ICONS) */}
-                    <div className="mt-3.5 flex flex-wrap justify-center gap-1.5">
+                    {/* Clean Starter prompt pills (NO ICONS, compact, professional) */}
+                    <div className="mt-3 flex flex-wrap justify-center gap-1.5">
                       {PROMPT_SUGGESTIONS.map((s, idx) => (
                         <button
                           key={idx}
                           onClick={() => void send(s.prompt)}
-                          className="inline-flex cursor-pointer items-center rounded-md border border-line bg-ink2/70 px-2.5 py-1.5 text-[11px] font-medium text-mut transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-fg shadow-sm"
+                          className="inline-flex cursor-pointer items-center rounded-md border border-line bg-ink2/70 px-2.5 py-1 text-[11px] font-medium text-mut transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-fg shadow-xs"
                         >
                           {s.title}
                         </button>
@@ -840,48 +840,48 @@ export default function ChatPage() {
                     className={cx("flex flex-col", m.role === "user" ? "items-end" : "items-start")}
                   >
                     {m.role === "user" ? (
-                      <div className="flex flex-col items-end gap-0.5 max-w-[85%]">
-                        <span className="text-[9.5px] font-mono uppercase tracking-wider text-mut2 mr-1">
-                          You
-                        </span>
-                        <div className="rounded-xl rounded-tr-xs border border-accent/30 bg-accent/15 px-3 py-1.5 text-[12.5px] text-fg leading-relaxed shadow-sm">
+                      <div className="flex flex-col items-end gap-0.5 max-w-[80%]">
+                        <div className="flex items-center gap-1.5 px-1 text-[9px] font-mono text-mut2 mr-0.5">
+                          <span>You</span>
+                          <span>·</span>
+                          <span>{m.timestamp}</span>
+                        </div>
+                        <div className="rounded-lg rounded-tr-xs border border-accent/40 bg-accent/15 px-3 py-1.5 text-[12px] text-fg leading-relaxed shadow-xs">
                           <div className="whitespace-pre-wrap break-words">{m.content}</div>
                         </div>
-                        <span className="text-[9px] text-mut2/70 mr-1">{m.timestamp}</span>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-start gap-1 w-full max-w-[92%]">
-                        <div className="flex items-center justify-between w-full px-1 text-[10px] font-mono text-mut2">
+                      <div className="flex flex-col items-start gap-0.5 w-full max-w-[85%]">
+                        <div className="flex items-center justify-between w-full px-1 text-[9.5px] font-mono text-mut2">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-semibold uppercase tracking-wider text-accent">
+                            <span className="font-semibold uppercase tracking-wider text-accent text-[9.5px]">
                               {m.modelName || selectedModelMeta.name}
                             </span>
                             {m.provider && (
-                              <span className="rounded bg-white/[0.05] border border-line px-1 py-0.2 text-[9px] text-mut font-medium">
+                              <span className="rounded bg-white/[0.05] border border-line px-1 py-0.2 text-[8.5px] text-mut font-medium">
                                 {m.provider}
                               </span>
                             )}
+                            <span>·</span>
+                            <span className="text-[9px]">{m.timestamp}</span>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px]">{m.timestamp}</span>
-                            <button
-                              type="button"
-                              onClick={() => copyMessage(m.id, m.content)}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.2 text-[9.5px] text-mut transition-colors hover:text-fg"
-                              aria-label="Copy response"
-                            >
-                              {copiedId === m.id ? (
-                                <Check className="size-2.5 text-good" />
-                              ) : (
-                                <Copy className="size-2.5" />
-                              )}
-                              <span>{copiedId === m.id ? "Copied" : "Copy"}</span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyMessage(m.id, m.content)}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-mut transition-colors hover:text-fg hover:bg-white/[0.06]"
+                            aria-label="Copy response"
+                          >
+                            {copiedId === m.id ? (
+                              <Check className="size-2 text-good" />
+                            ) : (
+                              <Copy className="size-2" />
+                            )}
+                            <span>{copiedId === m.id ? "Copied" : "Copy"}</span>
+                          </button>
                         </div>
 
-                        <div className="w-full rounded-xl rounded-tl-xs border border-line bg-ink2/90 px-3.5 py-2.5 text-[12.5px] text-fg leading-relaxed shadow-sm">
+                        <div className="w-full rounded-lg rounded-tl-xs border border-line bg-panel2/60 px-3 py-2 text-[12px] text-fg leading-relaxed shadow-xs">
                           <MessageContent
                             text={m.content}
                             isStreaming={streaming && m === messages[messages.length - 1]}
@@ -896,9 +896,9 @@ export default function ChatPage() {
 
             {/* Error Banner */}
             {error && (
-              <div className="mx-3 mb-2 flex items-center justify-between rounded-lg border border-bad/30 bg-bad/10 px-3 py-1.5 text-[11.5px] text-bad">
+              <div className="mx-2.5 mb-2 flex items-center justify-between rounded-md border border-bad/30 bg-bad/10 px-2.5 py-1 text-[11px] text-bad">
                 <div className="flex items-center gap-1.5">
-                  <Info className="size-3.5 shrink-0" />
+                  <Info className="size-3 shrink-0" />
                   <span>{error}</span>
                 </div>
                 <button
@@ -911,9 +911,9 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Pinned Input Container - Guaranteed 100% visible on screen */}
-            <div className="shrink-0 border-t border-line bg-panel2/20 p-2 sm:p-2.5">
-              <div className="rounded-lg border border-line2 bg-ink2/95 shadow-sm transition-colors duration-150 focus-within:border-accent/60">
+            {/* Pinned Compact Input Container */}
+            <div className="shrink-0 border-t border-line bg-panel2/20 p-2">
+              <div className="rounded-lg border border-line2 bg-ink2/95 shadow-xs transition-colors duration-150 focus-within:border-accent/60">
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -924,17 +924,17 @@ export default function ChatPage() {
                       void send();
                     }
                   }}
-                  placeholder={`Ask ${selectedModelMeta.name} anything… (Enter to send, Shift+Enter for newline)`}
+                  placeholder={`Ask ${selectedModelMeta.name}… (Enter to send, Shift+Enter for newline)`}
                   rows={1}
-                  className="w-full resize-none bg-transparent px-3 py-1.5 text-[12.5px] text-fg placeholder:text-mut2 focus:outline-none min-h-[36px] max-h-[80px]"
+                  className="w-full resize-none bg-transparent px-2.5 py-1.5 text-[12px] text-fg placeholder:text-mut2 focus:outline-none min-h-[34px] max-h-[70px]"
                   aria-label="Message prompt"
                 />
 
-                <div className="flex items-center justify-between border-t border-line/30 px-2.5 py-1 text-[10.5px]">
+                <div className="flex items-center justify-between border-t border-line/30 px-2 py-1 text-[10px]">
                   <div className="flex items-center gap-1.5 text-mut2">
                     <span className="inline-block size-1.5 rounded-full bg-accent animate-pulse" />
-                    <span className="font-mono text-[10px] text-fg font-medium">{selectedModelMeta.slug}</span>
-                    <span className="text-[10px] text-mut2/80 hidden sm:inline">· ↵ to send</span>
+                    <span className="font-mono text-[9.5px] text-fg font-medium">{selectedModelMeta.slug}</span>
+                    <span className="text-[9.5px] text-mut2/80 hidden sm:inline">· ↵ to send</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -942,10 +942,10 @@ export default function ChatPage() {
                       <button
                         type="button"
                         onClick={stop}
-                        className="inline-flex h-6.5 cursor-pointer items-center gap-1 rounded-md border border-bad/30 bg-bad/15 px-2 text-[10.5px] font-semibold text-bad transition-colors hover:bg-bad/25"
+                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded border border-bad/30 bg-bad/15 px-2 text-[10px] font-semibold text-bad transition-colors hover:bg-bad/25"
                         aria-label="Stop generation"
                       >
-                        <Square className="size-2.5 fill-current" />
+                        <Square className="size-2 fill-current" />
                         <span>Stop</span>
                       </button>
                     ) : (
@@ -953,11 +953,11 @@ export default function ChatPage() {
                         type="button"
                         onClick={() => void send()}
                         disabled={!input.trim()}
-                        className="inline-flex h-6.5 cursor-pointer items-center gap-1 rounded-md bg-accent px-2.5 text-[10.5px] font-semibold text-accent-ink transition-colors hover:bg-accent2 disabled:pointer-events-none disabled:opacity-40 shadow-sm"
+                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-accent px-2 text-[10px] font-semibold text-accent-ink transition-colors hover:bg-accent2 disabled:pointer-events-none disabled:opacity-40 shadow-xs"
                         aria-label="Send message"
                       >
                         <span>Send</span>
-                        <Send className="size-2.5" />
+                        <Send className="size-2" />
                       </button>
                     )}
                   </div>
@@ -1048,10 +1048,10 @@ export default function ChatPage() {
                       <span
                         className={cx(
                           "inline-flex items-center gap-1 font-mono text-[9.5px]",
-                          apiKey.trim() ? "text-good" : "text-warn"
+                          apiKey.trim() ? "text-good font-medium" : "text-warn"
                         )}
                       >
-                        ● {apiKey.trim() ? "Saved" : "Required"}
+                        ● {apiKey.trim() ? "Connected & Saved" : "Required"}
                       </span>
                     </div>
 
@@ -1064,29 +1064,46 @@ export default function ChatPage() {
                         placeholder="pro_sk_live_…"
                         autoComplete="off"
                         spellCheck={false}
-                        className="h-7 w-full rounded-md border border-line bg-ink2 px-2.5 pr-7 font-mono text-[10.5px] text-fg placeholder:text-mut2 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                        className="h-7 w-full rounded-md border border-line bg-ink2 px-2.5 pr-14 font-mono text-[10.5px] text-fg placeholder:text-mut2 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowKey(!showKey)}
-                        className="absolute right-2 top-1.5 text-mut hover:text-fg"
-                        aria-label="Toggle password visibility"
-                      >
-                        {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                      </button>
+                      <div className="absolute right-1.5 top-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (apiKey.trim()) {
+                              navigator.clipboard.writeText(apiKey.trim());
+                              toast.push("Copied API key to clipboard", "success");
+                            }
+                          }}
+                          className="text-mut hover:text-fg p-0.5 cursor-pointer"
+                          title="Copy API key"
+                          aria-label="Copy API key"
+                        >
+                          <Copy className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowKey(!showKey)}
+                          className="text-mut hover:text-fg p-0.5 cursor-pointer"
+                          title={showKey ? "Hide key" : "Show key"}
+                          aria-label="Toggle password visibility"
+                        >
+                          {showKey ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                        </button>
+                      </div>
                     </div>
 
                     <p className="mt-1 text-[9.5px] leading-relaxed text-mut2">
-                      Stored in this browser only.
+                      Stored in this browser only. Never deleted automatically.
                     </p>
 
                     <div className="mt-2">
                       <Link
                         href="/dashboard/keys"
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-line2 bg-white/[0.04] py-1 text-[10.5px] font-medium text-fg hover:bg-white/[0.08] transition-colors"
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-line2 bg-white/[0.04] py-1 text-[10px] font-medium text-fg hover:bg-white/[0.08] transition-colors"
                       >
-                        <KeyRound className="size-3" />
-                        Manage API Keys
+                        <KeyRound className="size-2.5" />
+                        <span>Manage Keys</span>
                       </Link>
                     </div>
                   </div>

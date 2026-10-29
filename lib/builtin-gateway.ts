@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Buffer } from "node:buffer";
 import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from "./server-api";
 
 interface SessionUser {

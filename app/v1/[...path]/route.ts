@@ -62,7 +62,7 @@ async function proxyV1(req: NextRequest, path: string[]) {
 
   // 2. Direct upstream fallback for /v1/chat/completions
   if (subpath === "chat/completions" && req.method === "POST") {
-    let payload: any = {};
+    let payload: Record<string, unknown> = {};
     try {
       payload = await req.json();
     } catch {
@@ -100,8 +100,9 @@ async function proxyV1(req: NextRequest, path: string[]) {
         status: upstreamRes.status,
         headers: resHeaders,
       });
-    } catch (err: any) {
-      return NextResponse.json({ error: { message: "Upstream error: " + (err?.message || "connection failed"), type: "api_error" } }, { status: 502 });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "connection failed";
+      return NextResponse.json({ error: { message: "Upstream error: " + msg, type: "api_error" } }, { status: 502 });
     }
   }
 

@@ -4,6 +4,8 @@ export interface TextModel {
   tier: string;
   description: string;
   bestFor: string;
+  inputPerMillion: number;
+  outputPerMillion: number;
 }
 
 export interface MonthlyPlan {
@@ -38,37 +40,62 @@ export const TEXT_MODELS: TextModel[] = [
     id: "pr-echo",
     name: "Pro Router Echo",
     tier: "Starter",
-    description: "Concise, low-cost replies for simple questions, quick lookups, and high-volume chat.",
-    bestFor: "Everyday short answers",
+    description: "A basic, affordable text-to-text model for everyday questions, short answers, summaries, and simple chat.",
+    bestFor: "Everyday questions, short answers, summaries, and simple chat",
+    inputPerMillion: 0.20,
+    outputPerMillion: 0.80,
   },
   {
     id: "pr-swift",
     name: "Pro Router Swift",
     tier: "Fast",
-    description: "Fast responses for simple conversations where latency matters more than depth.",
-    bestFor: "Quick, lightweight chat",
+    description: "Designed for quick responses, customer support, chatbots, and high-volume applications.",
+    bestFor: "Quick responses, customer support, chatbots, and high-volume applications",
+    inputPerMillion: 0.30,
+    outputPerMillion: 1.20,
   },
   {
     id: "pr-nova",
     name: "Pro Router Nova",
     tier: "Chat",
-    description: "Balanced replies for longer conversations, assistants, and customer support flows.",
-    bestFor: "Everyday assistants and support",
+    description: "Your general-purpose premium model for detailed answers, writing, reasoning, and everyday development assistance.",
+    bestFor: "Detailed answers, writing, reasoning, and everyday development assistance",
+    inputPerMillion: 0.50,
+    outputPerMillion: 2.00,
   },
   {
     id: "pr-aura",
     name: "Pro Router Aura",
     tier: "Writing",
-    description: "Clearer explanations, rewriting, and first drafts with a more considered tone.",
-    bestFor: "Polished writing and explanations",
+    description: "Positioned for more advanced reasoning, long-form content, complex instructions, and coding assistance, depending on the configured backend.",
+    bestFor: "Advanced reasoning, long-form content, complex instructions, and coding assistance",
+    inputPerMillion: 0.75,
+    outputPerMillion: 3.00,
   },
   {
     id: "pr-zenith",
     name: "Pro Router Zenith",
-    tier: "Detailed",
-    description: "Longer answers, summaries, and multi-step text work that need more room and care.",
-    bestFor: "Detailed, involved text tasks",
+    tier: "Flagship",
+    description: "Your flagship tier for the most demanding text tasks, complex analysis, and coding workflows supported by your chosen backend.",
+    bestFor: "Demanding text tasks, complex analysis, and coding workflows",
+    inputPerMillion: 1.00,
+    outputPerMillion: 4.00,
   },
+];
+
+export interface ModelTokenPrice {
+  model: string;
+  name: string;
+  inputPerMillion: number;
+  outputPerMillion: number;
+}
+
+export const MODEL_TOKEN_PRICING: ModelTokenPrice[] = [
+  { model: "pr-echo", name: "Echo", inputPerMillion: 0.20, outputPerMillion: 0.80 },
+  { model: "pr-swift", name: "Swift", inputPerMillion: 0.30, outputPerMillion: 1.20 },
+  { model: "pr-nova", name: "Nova", inputPerMillion: 0.50, outputPerMillion: 2.00 },
+  { model: "pr-aura", name: "Aura", inputPerMillion: 0.75, outputPerMillion: 3.00 },
+  { model: "pr-zenith", name: "Zenith", inputPerMillion: 1.00, outputPerMillion: 4.00 },
 ];
 
 export const TEXT_PAYG = {
@@ -85,8 +112,12 @@ export const TEXT_PLANS: MonthlyPlan[] = [
     name: "Text Mini",
     priceUsd: 4.99,
     replies: 1000,
-    tagline: "For light, occasional use.",
-    features: ["1,000 replies / month", "Standard queue", "Basic usage dashboard", "All five text models"],
+    tagline: "For beginners and casual users",
+    features: [
+      "Up to 1,000 replies per month",
+      "Access to Echo and Swift",
+      "Standard response limits",
+    ],
     status: "preview",
   },
   {
@@ -94,8 +125,12 @@ export const TEXT_PLANS: MonthlyPlan[] = [
     name: "Text Plus",
     priceUsd: 9.99,
     replies: 3000,
-    tagline: "For regular conversations and small teams.",
-    features: ["3,000 replies / month", "Priority within configured limits", "Usage tracking", "All five text models"],
+    tagline: "For regular AI users",
+    features: [
+      "Up to 3,000 replies per month",
+      "Access to all five models",
+      "Higher usage limits",
+    ],
     popular: true,
     status: "preview",
   },
@@ -104,8 +139,12 @@ export const TEXT_PLANS: MonthlyPlan[] = [
     name: "Text Pro",
     priceUsd: 19.99,
     replies: 10000,
-    tagline: "For heavier everyday use.",
-    features: ["10,000 replies / month", "Higher allowance", "Detailed analytics", "All five text models"],
+    tagline: "For developers and power users",
+    features: [
+      "Up to 10,000 replies per month",
+      "Access to all five models",
+      "Priority rate limits, where infrastructure allows",
+    ],
     status: "preview",
   },
   {
@@ -113,8 +152,12 @@ export const TEXT_PLANS: MonthlyPlan[] = [
     name: "Text Unlimited",
     priceUsd: 29.99,
     replies: null,
-    tagline: "Intended for sustained, high-volume use.",
-    features: ["Fair-use policy required", "Abuse and capacity safeguards", "No silent throttling or downgrades", "Not for sale yet"],
+    tagline: "For heavy users",
+    features: [
+      "High-volume text generation",
+      "Access to all five models",
+      "Published fair-use and rate limits",
+    ],
     status: "waitlist",
   },
 ];
@@ -195,11 +238,11 @@ export const TEXT_FAQS = [
   },
   {
     q: "How does pay-as-you-go billing work?",
-    a: "Text Starter charges for billable input and output tokens at $0.50 and $1.50 per million tokens. There is no monthly subscription. The estimator on the pay-as-you-go screen shows the formula using your own assumptions.",
+    a: "Our models have explicit per-token pricing: Echo ($0.20/$0.80), Swift ($0.30/$1.20), Nova ($0.50/$2.00), Aura ($0.75/$3.00), and Zenith ($1.00/$4.00) per 1M tokens. There is no forced monthly subscription for pay-as-you-go.",
   },
   {
     q: "Do failed requests use my allowance?",
-    a: "No. A request that fails before a response completes does not consume a reply under this preview policy. Provider-reported or estimated token usage determines any PAYG charge.",
+    a: "No. A request that fails before a response completes does not consume a reply under this preview policy.",
   },
   {
     q: "Can I change or cancel a monthly plan?",
@@ -207,17 +250,17 @@ export const TEXT_FAQS = [
   },
   {
     q: "Is Text Unlimited actually unlimited?",
-    a: "Text Unlimited is not for sale yet. We will only offer an unlimited plan after fair-use, abuse-prevention, concurrency, and capacity safeguards are documented and supportable.",
+    a: "Text Unlimited is designed for heavy users under published fair-use and rate limits to guarantee high availability.",
   },
   {
     q: "Where can I see replies used and remaining?",
-    a: "The Text & Reply usage screen shows the current plan, renewal date, replies consumed, replies remaining, token totals, and recent requests. The figures are development fixtures until usage metering is connected.",
+    a: "The Text & Reply usage screen shows the current plan, renewal date, replies consumed, replies remaining, token totals, and recent requests.",
   },
 ];
 
 export const TEXT_BENEFITS = [
   { title: "Five models, one API", body: "Use one OpenAI-compatible interface instead of integrating several text providers." },
-  { title: "Token-level PAYG", body: "Pay for billable input and output tokens with no monthly subscription." },
+  { title: "Token-level PAYG", body: "Pay for billable input and output tokens with transparent per-token rates." },
   { title: "Predictable monthly options", body: "Choose a reply allowance for steadier spending when usage is regular." },
   { title: "Usage you can see", body: "Track replies consumed, replies remaining, token totals, and recent requests." },
   { title: "Failures do not count", body: "A request that fails before completion does not use a reply under the stated policy." },

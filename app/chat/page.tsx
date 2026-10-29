@@ -45,7 +45,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Pro Router Zenith",
     provider: "ProRouter",
     category: "Tiered",
-    description: "Flagship tier for complex analysis, architecture synthesis, and deep reasoning.",
+    description: "Flagship tier for complex analysis, architecture synthesis, and deep reasoning workflows.",
     context: "128k context",
     badge: "Flagship",
     inputPer1M: 1.00,
@@ -56,7 +56,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Pro Router Aura",
     provider: "ProRouter",
     category: "Tiered",
-    description: "Advanced reasoning, long-form content, complex instructions, and coding.",
+    description: "Advanced reasoning, long-form content, complex instructions, and coding assistance.",
     context: "128k context",
     badge: "Writing",
     inputPer1M: 0.75,
@@ -67,7 +67,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Pro Router Nova",
     provider: "ProRouter",
     category: "Tiered",
-    description: "General-purpose premium model for detailed answers, writing, and dev assistance.",
+    description: "General-purpose premium model for detailed answers, writing, reasoning, and development.",
     context: "128k context",
     badge: "General",
     inputPer1M: 0.50,
@@ -78,7 +78,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Pro Router Swift",
     provider: "ProRouter",
     category: "Tiered",
-    description: "Ultra-fast low latency model designed for customer support and high-volume chat.",
+    description: "Ultra-fast low latency model designed for customer support, quick chat, and high-volume tasks.",
     context: "128k context",
     badge: "Fast",
     inputPer1M: 0.30,
@@ -89,7 +89,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Pro Router Echo",
     provider: "ProRouter",
     category: "Tiered",
-    description: "Affordable model for everyday questions, short answers, and simple chat.",
+    description: "Affordable model for everyday questions, short answers, summaries, and simple chat.",
     context: "128k context",
     badge: "Starter",
     inputPer1M: 0.20,
@@ -102,7 +102,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Kimi K2.7 Code",
     provider: "Moonshot",
     category: "Coding",
-    description: "Specialized agentic coding model for repo-level refactoring and debugging.",
+    description: "Specialized agentic coding model for repository refactoring, multi-file edits, and debugging.",
     context: "128k context",
     badge: "Top Choice",
     inputPer1M: 0.50,
@@ -124,7 +124,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Devstral 24B",
     provider: "Mistral",
     category: "Coding",
-    description: "Specialized developer model optimized for zero-shot script and terminal tasks.",
+    description: "Mistral specialized developer model optimized for zero-shot script and terminal tasks.",
     context: "32k context",
     badge: "Code",
     inputPer1M: 0.40,
@@ -135,7 +135,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Claude Sonnet",
     provider: "Anthropic",
     category: "Coding",
-    description: "High-precision software engineering and architectural code refactoring.",
+    description: "High-precision software engineering, architectural analysis, and complex code refactoring.",
     context: "200k context",
     badge: "Engineering",
     inputPer1M: 0.75,
@@ -146,7 +146,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Claude Opus",
     provider: "Anthropic",
     category: "Frontier",
-    description: "Flagship deep architecture, mathematical analysis, and multi-step reasoning.",
+    description: "Anthropic flagship deep architecture, mathematical analysis, and multi-step reasoning.",
     context: "200k context",
     badge: "Flagship",
     inputPer1M: 1.00,
@@ -159,7 +159,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "DeepSeek-V4.1-Flash-1017",
     provider: "DeepSeek",
     category: "Frontier",
-    description: "State-of-the-art open-weight checkpoint with lightning fast token throughput.",
+    description: "State-of-the-art open-weight checkpoint with lightning fast token throughput and deep reasoning.",
     context: "128k context",
     badge: "Popular",
     inputPer1M: 0.50,
@@ -181,7 +181,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "Qwen3.8-27B",
     provider: "Alibaba",
     category: "Open-Weight",
-    description: "Alibaba dense open-weight intelligence with strong multilingual comprehension.",
+    description: "Alibaba dense open-weight intelligence with strong multilingual comprehension and coding.",
     context: "128k context",
     badge: "High IQ",
     inputPer1M: 0.50,
@@ -223,7 +223,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     name: "MiniMax M3.1 Flash",
     provider: "MiniMax",
     category: "Open-Weight",
-    description: "High-throughput rapid text generation with balanced accuracy.",
+    description: "High-throughput rapid text generation with balanced accuracy and minimal latency.",
     context: "128k context",
     badge: "Fast",
     inputPer1M: 0.30,
@@ -418,16 +418,16 @@ function MessageContent({ text, isStreaming }: { text: string; isStreaming?: boo
   }, [cleaned]);
 
   return (
-    <div className="space-y-2 leading-relaxed">
+    <div className="space-y-2.5 leading-relaxed">
       {parts.map((part, index) => {
         if (part.type === "code") {
           return <CodeSnippet key={index} code={part.content} lang={part.lang} />;
         }
         return (
-          <div key={index} className="whitespace-pre-wrap break-words text-[13px]">
+          <div key={index} className="whitespace-pre-wrap break-words text-[13.5px]">
             {part.content}
             {isStreaming && index === parts.length - 1 && (
-              <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-accent align-middle" />
+              <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-accent align-middle" />
             )}
           </div>
         );
@@ -447,22 +447,22 @@ function CodeSnippet({ code, lang }: { code: string; lang?: string }) {
   };
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-line bg-[#040714] text-[12px]">
-      <div className="flex items-center justify-between border-b border-line bg-panel2/60 px-3 py-1 text-[10.5px] font-mono text-mut2">
-        <span className="flex items-center gap-1 uppercase tracking-wider text-accent2">
-          <Code2 className="size-3" />
+    <div className="my-2.5 overflow-hidden rounded-xl border border-line bg-[#040714] text-[12.5px]">
+      <div className="flex items-center justify-between border-b border-line bg-panel2/60 px-3.5 py-1.5 text-[11px] font-mono text-mut2">
+        <span className="flex items-center gap-1.5 uppercase tracking-wider text-accent2">
+          <Code2 className="size-3.5" />
           {lang || "code"}
         </span>
         <button
           onClick={copyCode}
-          className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-mut transition-colors duration-150 hover:bg-white/[0.08] hover:text-fg"
+          className="inline-flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 text-mut transition-colors duration-150 hover:bg-white/[0.08] hover:text-fg"
           aria-label="Copy code snippet"
         >
-          {copied ? <Check className="size-2.5 text-good" /> : <Copy className="size-2.5" />}
+          {copied ? <Check className="size-3 text-good" /> : <Copy className="size-3" />}
           <span>{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-[12px] leading-relaxed text-fg/90">
+      <pre className="overflow-x-auto p-3.5 font-mono text-[12.5px] leading-relaxed text-fg/90">
         <code>{code}</code>
       </pre>
     </div>
@@ -711,23 +711,25 @@ export default function ChatPage() {
 
   return (
     <PublicShell>
-      <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4">
-        {/* Compact Clean Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line pb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="flex size-7 items-center justify-center rounded-lg border border-line bg-panel2 text-accent">
-              <Sparkles className="size-3.5" />
+      <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-5">
+        {/* Sleek, Comfortable Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-lg border border-line bg-panel2 text-accent shadow-sm">
+              <Sparkles className="size-4" />
             </div>
-            <span className="text-sm font-semibold tracking-tight text-fg">Playground</span>
-            <span className="text-line2 text-xs">/</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[15px] font-semibold tracking-tight text-fg">Playground</span>
+              <span className="text-line2 text-xs">/</span>
+            </div>
 
-            {/* Compact Model Selector */}
+            {/* Model Selector Pill */}
             <div className="relative">
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 disabled={streaming}
-                className="h-7 cursor-pointer appearance-none rounded-md border border-line2 bg-ink2 pl-2.5 pr-6 font-mono text-[11.5px] font-medium text-fg shadow-sm transition-colors duration-150 hover:border-mut focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                className="h-8 cursor-pointer appearance-none rounded-lg border border-line2 bg-ink2 pl-3 pr-8 font-mono text-[12px] font-medium text-fg shadow-sm transition-colors duration-150 hover:border-mut focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               >
                 <optgroup label="Pro Router Tiered">
                   {CATALOG_MODELS.filter((m) => m.category === "Tiered").map((m) => (
@@ -758,75 +760,75 @@ export default function ChatPage() {
                   ))}
                 </optgroup>
               </select>
-              <ChevronDown className="pointer-events-none absolute right-1.5 top-2 size-3 text-mut" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-2.5 size-3.5 text-mut" />
             </div>
 
-            <span className="hidden sm:inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-mut2">
-              <Zap className="size-2.5 text-accent" />
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] text-mut2">
+              <Zap className="size-3 text-accent" />
               {selectedModelMeta.context}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <Link
               href="/dashboard/keys"
               className={cx(
-                "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors",
+                "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors",
                 apiKey.trim()
                   ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/20"
                   : "border-line2 bg-white/[0.04] text-mut hover:text-fg"
               )}
             >
-              <KeyRound className="size-3" />
-              {apiKey.trim() ? "Key Active" : "Set Key"}
+              <KeyRound className="size-3.5" />
+              <span>{apiKey.trim() ? "Key Connected" : "API Key"}</span>
             </Link>
 
             <button
               onClick={reset}
               disabled={messages.length === 0 && !streaming}
-              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-line2 bg-white/[0.04] px-2 text-[11px] font-medium text-mut transition-colors hover:bg-white/[0.08] hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line2 bg-white/[0.04] px-3 text-[12px] font-medium text-mut transition-colors hover:bg-white/[0.08] hover:text-fg disabled:pointer-events-none disabled:opacity-40"
               title="New Conversation"
             >
-              <RotateCcw className="size-3" />
+              <RotateCcw className="size-3.5" />
               <span>New</span>
             </button>
           </div>
         </div>
 
         {/* Main Content Layout */}
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_270px]">
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_290px]">
           {/* Left: Chat Container */}
-          <div className="flex h-[calc(100vh-130px)] min-h-[500px] max-h-[760px] flex-col rounded-xl border border-line bg-panel/70 shadow-sm backdrop-blur-sm">
+          <div className="flex h-[calc(100vh-135px)] min-h-[540px] max-h-[780px] flex-col rounded-2xl border border-line bg-panel/70 shadow-sm backdrop-blur-sm">
             {/* Conversation Feed */}
             <div
               ref={scrollRef}
-              className="flex-1 space-y-3.5 overflow-y-auto p-3 sm:p-4"
+              className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5"
               aria-live="polite"
               aria-label="Conversation Feed"
             >
               {messages.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center py-6 text-center">
-                  <div className="flex size-9 items-center justify-center rounded-xl border border-line2 bg-panel2 text-accent shadow-sm">
-                    <Sparkles className="size-4" />
+                <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                  <div className="flex size-11 items-center justify-center rounded-2xl border border-line2 bg-panel2 text-accent shadow-sm">
+                    <Sparkles className="size-5" />
                   </div>
-                  <h2 className="mt-2.5 text-[13.5px] font-semibold text-fg">
+                  <h2 className="mt-3.5 text-base font-semibold text-fg">
                     Chat with {selectedModelMeta.name}
                   </h2>
-                  <p className="mt-0.5 max-w-sm text-[11.5px] leading-relaxed text-mut">
+                  <p className="mt-1 max-w-md text-[12.5px] leading-relaxed text-mut">
                     {selectedModelMeta.description}
                   </p>
 
                   {/* Compact Starter prompt pills */}
-                  <div className="mt-4 flex flex-wrap justify-center gap-1.5 max-w-lg">
+                  <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-xl">
                     {PROMPT_SUGGESTIONS.map((s, idx) => {
                       const Icon = s.icon;
                       return (
                         <button
                           key={idx}
                           onClick={() => void send(s.prompt)}
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-ink2/70 px-3 py-1 text-[11.5px] text-mut transition-all duration-150 hover:border-accent/40 hover:bg-accent/5 hover:text-fg"
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-ink2/80 px-3.5 py-2 text-[12px] font-medium text-mut transition-all duration-150 hover:border-accent/40 hover:bg-accent/5 hover:text-fg shadow-sm"
                         >
-                          <Icon className="size-3 text-accent" />
+                          <Icon className="size-3.5 text-accent" />
                           <span>{s.title}</span>
                         </button>
                       );
@@ -837,48 +839,48 @@ export default function ChatPage() {
                 messages.map((m) => (
                   <div
                     key={m.id}
-                    className={cx("flex gap-2.5", m.role === "user" ? "justify-end" : "justify-start")}
+                    className={cx("flex gap-3", m.role === "user" ? "justify-end" : "justify-start")}
                   >
                     {m.role === "assistant" && (
-                      <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border border-line2 bg-panel2 font-mono text-[10px] font-semibold text-accent shadow-sm">
-                        <Bot className="size-3" />
+                      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-xl border border-line2 bg-panel2 font-mono text-[11px] font-semibold text-accent shadow-sm">
+                        <Bot className="size-3.5" />
                       </div>
                     )}
 
                     <div
                       className={cx(
-                        "relative max-w-[85%] rounded-xl px-3.5 py-2.5 shadow-sm transition-all",
+                        "relative max-w-[85%] rounded-2xl px-4 py-3 shadow-sm transition-all",
                         m.role === "user"
-                          ? "rounded-tr-sm bg-accent text-accent-ink font-medium"
-                          : "rounded-tl-sm border border-line bg-ink2/85 text-fg"
+                          ? "rounded-tr-xs bg-accent text-accent-ink font-medium"
+                          : "rounded-tl-xs border border-line bg-ink2/90 text-fg"
                       )}
                     >
                       {/* Assistant header line */}
                       {m.role === "assistant" && (
-                        <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-line/50 pb-1 text-[10.5px] text-mut2">
-                          <div className="flex items-center gap-1">
+                        <div className="mb-2 flex items-center justify-between gap-4 border-b border-line/60 pb-1.5 text-[11px] text-mut2">
+                          <div className="flex items-center gap-2">
                             <span className="font-semibold text-fg">
                               {m.modelName || selectedModelMeta.name}
                             </span>
                             {m.provider && (
-                              <span className="rounded bg-white/[0.06] px-1 py-0.2 text-[9.5px] text-mut">
+                              <span className="rounded-md bg-white/[0.06] border border-line px-1.5 py-0.5 text-[10px] text-mut font-medium">
                                 {m.provider}
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px]">{m.timestamp}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10.5px]">{m.timestamp}</span>
                             <button
                               type="button"
                               onClick={() => copyMessage(m.id, m.content)}
-                              className="inline-flex cursor-pointer items-center gap-0.5 text-[10px] text-mut transition-colors hover:text-fg"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-mut transition-colors hover:bg-white/[0.06] hover:text-fg"
                               aria-label="Copy response"
                             >
                               {copiedId === m.id ? (
-                                <Check className="size-2.5 text-good" />
+                                <Check className="size-3 text-good" />
                               ) : (
-                                <Copy className="size-2.5" />
+                                <Copy className="size-3" />
                               )}
                               <span>{copiedId === m.id ? "Copied" : "Copy"}</span>
                             </button>
@@ -894,8 +896,8 @@ export default function ChatPage() {
                     </div>
 
                     {m.role === "user" && (
-                      <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border border-line bg-white/[0.04] text-mut">
-                        <User className="size-3" />
+                      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-xl border border-line bg-white/[0.04] text-mut">
+                        <User className="size-3.5" />
                       </div>
                     )}
                   </div>
@@ -905,9 +907,9 @@ export default function ChatPage() {
 
             {/* Error Banner */}
             {error && (
-              <div className="mx-3 mb-2 flex items-center justify-between rounded-lg border border-bad/30 bg-bad/10 px-3 py-1.5 text-[11.5px] text-bad">
-                <div className="flex items-center gap-1.5">
-                  <Info className="size-3.5 shrink-0" />
+              <div className="mx-4 mb-2 flex items-center justify-between rounded-xl border border-bad/30 bg-bad/10 px-3.5 py-2 text-[12px] text-bad">
+                <div className="flex items-center gap-2">
+                  <Info className="size-4 shrink-0" />
                   <span>{error}</span>
                 </div>
                 <button
@@ -920,9 +922,9 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Compact Pinned Input Container */}
-            <div className="border-t border-line bg-panel2/20 p-2 sm:p-2.5">
-              <div className="rounded-xl border border-line2 bg-ink2/95 shadow-sm transition-colors duration-150 focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/20">
+            {/* Pinned Input Container */}
+            <div className="border-t border-line bg-panel2/20 p-3 sm:p-3.5">
+              <div className="rounded-xl border border-line2 bg-ink2/95 shadow-sm transition-colors duration-150 focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -933,28 +935,28 @@ export default function ChatPage() {
                       void send();
                     }
                   }}
-                  placeholder={`Ask ${selectedModelMeta.name}… (Enter to send, Shift+Enter for newline)`}
+                  placeholder={`Ask ${selectedModelMeta.name} anything… (Press Enter to send, Shift+Enter for newline)`}
                   rows={1}
-                  className="w-full resize-none bg-transparent px-3 py-2 text-[12.5px] text-fg placeholder:text-mut2 focus:outline-none min-h-[38px] max-h-[120px]"
+                  className="w-full resize-none bg-transparent px-3.5 py-2.5 text-[13px] text-fg placeholder:text-mut2 focus:outline-none min-h-[44px] max-h-[140px]"
                   aria-label="Message prompt"
                 />
 
-                <div className="flex items-center justify-between border-t border-line/30 px-2.5 py-1 text-[10.5px]">
-                  <div className="flex items-center gap-1.5 text-mut2">
-                    <span className="inline-block size-1.5 rounded-full bg-accent" />
-                    <span className="font-mono text-[10px] text-fg">{selectedModelMeta.name}</span>
-                    <span className="text-[10px] text-mut2/70 hidden sm:inline">· ↵ to send</span>
+                <div className="flex items-center justify-between border-t border-line/30 px-3 py-1.5 text-[11px]">
+                  <div className="flex items-center gap-2 text-mut2">
+                    <span className="inline-block size-2 rounded-full bg-accent animate-pulse" />
+                    <span className="font-mono text-[11px] text-fg font-medium">{selectedModelMeta.name}</span>
+                    <span className="text-[11px] text-mut2/80 hidden sm:inline">· ↵ to send, Shift+↵ for newline</span>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     {streaming ? (
                       <button
                         type="button"
                         onClick={stop}
-                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-bad/15 px-2 text-[10.5px] font-medium text-bad transition-colors hover:bg-bad/25"
+                        className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-bad/30 bg-bad/15 px-2.5 text-[11px] font-semibold text-bad transition-colors hover:bg-bad/25"
                         aria-label="Stop generation"
                       >
-                        <Square className="size-2.5 fill-current" />
+                        <Square className="size-3 fill-current" />
                         <span>Stop</span>
                       </button>
                     ) : (
@@ -962,11 +964,11 @@ export default function ChatPage() {
                         type="button"
                         onClick={() => void send()}
                         disabled={!input.trim()}
-                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-accent px-2.5 text-[10.5px] font-medium text-accent-ink transition-colors hover:bg-accent2 disabled:pointer-events-none disabled:opacity-40"
+                        className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-accent px-3 text-[11px] font-semibold text-accent-ink transition-colors hover:bg-accent2 disabled:pointer-events-none disabled:opacity-40 shadow-sm"
                         aria-label="Send message"
                       >
                         <span>Send</span>
-                        <Send className="size-2.5" />
+                        <Send className="size-3" />
                       </button>
                     )}
                   </div>
@@ -976,32 +978,32 @@ export default function ChatPage() {
           </div>
 
           {/* Right: Compact Sidebar / Telemetry / Settings */}
-          <aside className="space-y-3">
+          <aside className="space-y-3.5">
             {/* Tab navigation */}
-            <div className="flex rounded-lg border border-line bg-panel p-0.5">
+            <div className="flex rounded-xl border border-line bg-panel p-1">
               <button
                 onClick={() => setActiveTab("model")}
                 className={cx(
-                  "flex-1 cursor-pointer rounded-md py-1 text-center text-[11px] font-medium transition-colors",
-                  activeTab === "model" ? "bg-accent text-accent-ink" : "text-mut hover:text-fg"
+                  "flex-1 cursor-pointer rounded-lg py-1.5 text-center text-[11.5px] font-medium transition-colors",
+                  activeTab === "model" ? "bg-accent text-accent-ink font-semibold" : "text-mut hover:text-fg"
                 )}
               >
-                Model
+                Model Info
               </button>
               <button
                 onClick={() => setActiveTab("telemetry")}
                 className={cx(
-                  "flex-1 cursor-pointer rounded-md py-1 text-center text-[11px] font-medium transition-colors",
-                  activeTab === "telemetry" ? "bg-accent text-accent-ink" : "text-mut hover:text-fg"
+                  "flex-1 cursor-pointer rounded-lg py-1.5 text-center text-[11.5px] font-medium transition-colors",
+                  activeTab === "telemetry" ? "bg-accent text-accent-ink font-semibold" : "text-mut hover:text-fg"
                 )}
               >
-                Stats
+                Telemetry
               </button>
               <button
                 onClick={() => setActiveTab("curl")}
                 className={cx(
-                  "flex-1 cursor-pointer rounded-md py-1 text-center text-[11px] font-medium transition-colors",
-                  activeTab === "curl" ? "bg-accent text-accent-ink" : "text-mut hover:text-fg"
+                  "flex-1 cursor-pointer rounded-lg py-1.5 text-center text-[11.5px] font-medium transition-colors",
+                  activeTab === "curl" ? "bg-accent text-accent-ink font-semibold" : "text-mut hover:text-fg"
                 )}
               >
                 cURL
@@ -1010,37 +1012,35 @@ export default function ChatPage() {
 
             {/* TAB 1: MODEL DETAILS */}
             {activeTab === "model" && (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-line bg-panel p-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-1.5">
+              <div className="space-y-3.5">
+                <div className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-[12.5px] font-semibold text-fg">{selectedModelMeta.name}</h3>
-                      <p className="font-mono text-[10.5px] text-accent">
+                      <h3 className="text-[13.5px] font-semibold text-fg">{selectedModelMeta.name}</h3>
+                      <p className="font-mono text-[11px] text-accent mt-0.5">
                         {selectedModelMeta.slug}
                       </p>
                     </div>
                     {selectedModelMeta.badge && (
-                      <span className="rounded bg-accent/10 border border-accent/25 px-1.5 py-0.5 text-[9.5px] font-semibold text-accent">
-                        {selectedModelMeta.badge}
-                      </span>
+                      <Badge tone="accent">{selectedModelMeta.badge}</Badge>
                     )}
                   </div>
 
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-mut">
+                  <p className="mt-2 text-[11.5px] leading-relaxed text-mut">
                     {selectedModelMeta.description}
                   </p>
 
-                  <div className="mt-2.5 divide-y divide-line rounded-lg border border-line bg-ink2/50 text-[11px]">
-                    <div className="flex items-center justify-between p-2">
+                  <div className="mt-3 divide-y divide-line rounded-lg border border-line bg-ink2/50 text-[11.5px]">
+                    <div className="flex items-center justify-between p-2.5">
                       <span className="text-mut">Provider</span>
-                      <span className="font-medium text-fg">{selectedModelMeta.provider}</span>
+                      <span className="font-semibold text-fg">{selectedModelMeta.provider}</span>
                     </div>
-                    <div className="flex items-center justify-between p-2">
-                      <span className="text-mut">Context</span>
+                    <div className="flex items-center justify-between p-2.5">
+                      <span className="text-mut">Context Window</span>
                       <span className="font-mono text-fg">{selectedModelMeta.context}</span>
                     </div>
-                    <div className="flex items-center justify-between p-2">
-                      <span className="text-mut">In / Out 1M</span>
+                    <div className="flex items-center justify-between p-2.5">
+                      <span className="text-mut">In / Out 1M tokens</span>
                       <span className="font-mono text-fg">
                         ${selectedModelMeta.inputPer1M.toFixed(2)} / ${selectedModelMeta.outputPer1M.toFixed(2)}
                       </span>
@@ -1049,22 +1049,22 @@ export default function ChatPage() {
                 </div>
 
                 {/* API Key Box */}
-                <div className="rounded-xl border border-line bg-panel p-3 shadow-sm">
+                <div className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <label htmlFor="playground-key" className="text-[11.5px] font-semibold text-fg">
-                      API Key
+                    <label htmlFor="playground-key" className="text-[12px] font-semibold text-fg">
+                      ProRouter API Key
                     </label>
                     <span
                       className={cx(
-                        "inline-flex items-center gap-1 font-mono text-[10px]",
+                        "inline-flex items-center gap-1 font-mono text-[10.5px]",
                         apiKey.trim() ? "text-good" : "text-warn"
                       )}
                     >
-                      ● {apiKey.trim() ? "Saved" : "Needed"}
+                      ● {apiKey.trim() ? "Connected" : "Required"}
                     </span>
                   </div>
 
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-2">
                     <input
                       id="playground-key"
                       type={showKey ? "text" : "password"}
@@ -1073,25 +1073,29 @@ export default function ChatPage() {
                       placeholder="pro_sk_live_…"
                       autoComplete="off"
                       spellCheck={false}
-                      className="h-7 w-full rounded-md border border-line bg-ink2 px-2.5 pr-8 font-mono text-[11px] text-fg placeholder:text-mut2 focus:border-accent focus:outline-none"
+                      className="h-8.5 w-full rounded-lg border border-line bg-ink2 px-3 pr-9 font-mono text-[12px] text-fg placeholder:text-mut2 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowKey(!showKey)}
-                      className="absolute right-2 top-1.5 text-mut hover:text-fg"
+                      className="absolute right-2.5 top-2 text-mut hover:text-fg"
                       aria-label="Toggle password visibility"
                     >
-                      {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                     </button>
                   </div>
 
-                  <div className="mt-2.5">
+                  <p className="mt-2 text-[11px] leading-relaxed text-mut2">
+                    Stored locally in your browser only.
+                  </p>
+
+                  <div className="mt-3">
                     <Link
                       href="/dashboard/keys"
-                      className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-line2 bg-white/[0.04] py-1 text-[11px] font-medium text-mut hover:bg-white/[0.08] hover:text-fg"
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-line2 bg-white/[0.04] py-1.5 text-[11.5px] font-medium text-fg hover:bg-white/[0.08] transition-colors"
                     >
-                      <KeyRound className="size-3" />
-                      Get Keys
+                      <KeyRound className="size-3.5" />
+                      Manage API Keys
                     </Link>
                   </div>
                 </div>
@@ -1100,13 +1104,13 @@ export default function ChatPage() {
 
             {/* TAB 2: TELEMETRY */}
             {activeTab === "telemetry" && (
-              <div className="rounded-xl border border-line bg-panel p-3 shadow-sm">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-mut">
-                  Request Stats
+              <div className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
+                <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-mut">
+                  Request Telemetry
                 </h3>
 
                 {usage ? (
-                  <dl className="mt-2 space-y-1.5 text-[11px]">
+                  <dl className="mt-2.5 space-y-2 text-[11.5px]">
                     {usage.ttftMs != null && (
                       <div className="flex items-center justify-between border-b border-line pb-1.5">
                         <dt className="text-mut">Latency (TTFT)</dt>
@@ -1121,34 +1125,34 @@ export default function ChatPage() {
                     )}
                     {usage.promptTokens != null && (
                       <div className="flex items-center justify-between">
-                        <dt className="text-mut">Prompt</dt>
+                        <dt className="text-mut">Prompt Tokens</dt>
                         <dd className="font-mono text-mut2">{usage.promptTokens.toLocaleString()}</dd>
                       </div>
                     )}
                     {usage.completionTokens != null && (
                       <div className="flex items-center justify-between">
-                        <dt className="text-mut">Completion</dt>
+                        <dt className="text-mut">Completion Tokens</dt>
                         <dd className="font-mono text-mut2">{usage.completionTokens.toLocaleString()}</dd>
                       </div>
                     )}
                     {usage.costPaise != null && (
-                      <div className="flex items-center justify-between border-t border-line pt-1.5">
+                      <div className="flex items-center justify-between border-t border-line pt-2">
                         <dt className="text-mut">Estimated Cost</dt>
                         <dd className="font-mono text-good">{formatINR(usage.costPaise)}</dd>
                       </div>
                     )}
                     {usage.requestId && (
-                      <div className="border-t border-line pt-1.5">
-                        <dt className="text-mut text-[10px]">Request ID</dt>
-                        <dd className="mt-0.5 truncate font-mono text-[9.5px] text-mut2" title={usage.requestId}>
+                      <div className="border-t border-line pt-2">
+                        <dt className="text-mut text-[10.5px]">Request ID</dt>
+                        <dd className="mt-0.5 truncate font-mono text-[10px] text-mut2" title={usage.requestId}>
                           {usage.requestId}
                         </dd>
                       </div>
                     )}
                   </dl>
                 ) : (
-                  <div className="mt-4 text-center text-[11px] text-mut2">
-                    Send a message to see real-time TTFT and token usage.
+                  <div className="mt-4 text-center text-[11.5px] text-mut2">
+                    Send a message to view real-time TTFT and token usage.
                   </div>
                 )}
               </div>
@@ -1156,9 +1160,9 @@ export default function ChatPage() {
 
             {/* TAB 3: CURL EXPORT */}
             {activeTab === "curl" && (
-              <div className="rounded-xl border border-line bg-panel p-3 shadow-sm">
+              <div className="rounded-xl border border-line bg-panel p-3.5 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-mut">
+                  <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-mut">
                     cURL Snippet
                   </h3>
                   <button
@@ -1166,14 +1170,14 @@ export default function ChatPage() {
                       await navigator.clipboard.writeText(curlSnippet);
                       toast.push("Copied cURL to clipboard!", "success");
                     }}
-                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-accent hover:bg-accent/10"
+                    className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-accent hover:bg-accent/10 transition-colors"
                   >
-                    <Copy className="size-2.5" />
+                    <Copy className="size-3" />
                     Copy
                   </button>
                 </div>
 
-                <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-ink2 p-2 font-mono text-[10px] leading-relaxed text-mut">
+                <pre className="mt-2.5 overflow-x-auto rounded-lg border border-line bg-ink2 p-2.5 font-mono text-[10.5px] leading-relaxed text-mut">
                   <code>{curlSnippet}</code>
                 </pre>
               </div>

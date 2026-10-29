@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  MessagesSquare,
   ScanSearch,
   ScrollText,
   Settings,
@@ -68,6 +69,7 @@ const nav = [
   { section: "Overview", items: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/chat", label: "Playground", icon: MessageSquare },
+    { href: "/dashboard/text", label: "Text & Reply", icon: MessagesSquare },
     { href: "/models", label: "Models", icon: Boxes },
   ]},
   { section: "Build", items: [

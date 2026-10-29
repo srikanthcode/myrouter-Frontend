@@ -1,4 +1,4 @@
-const API_BASE = process.env.API_BASE_URL || "http://localhost:4000";
+const API_BASE = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 /**
  * Server-side fetch for public pages. Returns null instead of throwing so a

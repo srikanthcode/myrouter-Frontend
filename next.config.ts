@@ -6,7 +6,7 @@ import type { NextConfig } from "next";
 const API_BASE = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@uno/shared", "@uno/database", "@uno/routing", "@uno/providers"],
+  transpilePackages: ["@pro/shared", "@pro/database", "@pro/routing", "@pro/providers"],
   // Proxy API calls through the web origin: same-origin cookies, no CORS pain.
   // /v1/* exposes the OpenAI-compatible endpoint on the web port too, so
   // http://localhost:3000/v1 works as a drop-in base URL for SDKs.

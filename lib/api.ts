@@ -48,9 +48,11 @@ export function formatINR(paise: number): string {
 }
 
 export function formatCompactINR(paise: number): string {
-  if (Math.abs(paise) >= 10000000) return `₹${(paise / 10000000).toFixed(2)}Cr`;
-  if (Math.abs(paise) >= 100000) return `₹${(paise / 100000).toFixed(2)}L`;
-  if (Math.abs(paise) >= 1000) return `₹${(paise / 1000).toFixed(1)}K`;
+  const rupees = paise / 100;
+  const abs = Math.abs(rupees);
+  if (abs >= 10_000_000) return `₹${(rupees / 10_000_000).toFixed(2)}Cr`;
+  if (abs >= 100_000) return `₹${(rupees / 100_000).toFixed(2)}L`;
+  if (abs >= 1_000) return `₹${(rupees / 1_000).toFixed(1)}K`;
   return formatINR(paise);
 }
 

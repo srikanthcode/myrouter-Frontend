@@ -4,8 +4,7 @@ import Link from "next/link";
 import { ArrowUp, KeyRound, RotateCcw, Square, Trash2 } from "lucide-react";
 import { PublicShell } from "@/components/PublicShell";
 import { Badge, Button, IconButton, Select, Textarea, useToast } from "@/components/ui";
-import { cx } from "@/lib/api";
-import { formatINR, formatCompactINR } from "@/lib/api";
+import { cx, formatINR } from "@/lib/api";
 
 interface ModelOption {
   slug: string;
@@ -28,14 +27,32 @@ interface UsageInfo {
 }
 
 const models: ModelOption[] = [
-  { slug: "beam", name: "Beam" },
+  { slug: "deepseek-v4.1-flash-1017", name: "DeepSeek-V4.1-Flash-1017" },
+  { slug: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
+  { slug: "qwen3.8-27b", name: "Qwen3.8-27B" },
+  { slug: "glm-5.3", name: "GLM-5.3" },
+  { slug: "kimi-k3", name: "Kimi K3" },
+  { slug: "mimo-v2.6-pro", name: "MiMo-V2.6-Pro" },
+  { slug: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash" },
+  { slug: "qwen3-coder-next", name: "Qwen3-Coder-Next" },
+  { slug: "deepseek-v4-pro-0813", name: "DeepSeek-V4-Pro-0813" },
+  { slug: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
+  { slug: "devstral-24b", name: "Devstral 24B" },
+  { slug: "claude-sonnet", name: "Claude Sonnet" },
+  { slug: "claude-opus", name: "Claude Opus" },
+  { slug: "claude-opus-5", name: "Claude Opus 5" },
+  { slug: "gemini-pro", name: "Gemini Pro" },
+  { slug: "grok", name: "Grok" },
+  { slug: "mistral-large", name: "Mistral Large" },
+  { slug: "glm-5.3-flash", name: "GLM 5.3 Flash" },
+  { slug: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
+  { slug: "gpt-6.1-terra", name: "GPT-6.1 Terra" },
   { slug: "mimo-v2.6-flash", name: "MiMo V2.6 Flash" },
+  { slug: "gpt-6-luna", name: "GPT-6 Luna" },
+  { slug: "beam", name: "Beam" },
   { slug: "nemotron-3.5-super-vl", name: "Nemotron 3.5 Super VL" },
   { slug: "nemotron-3.5-lightning", name: "Nemotron 3.5 Lightning" },
   { slug: "longcat-2.5-preview", name: "LongCat 2.5 Preview" },
-  { slug: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
-  { slug: "glm-5.3-flash", name: "GLM 5.3 Flash" },
-  { slug: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash" },
   { slug: "jev-1.13", name: "Jev 1.13" },
 ];
 

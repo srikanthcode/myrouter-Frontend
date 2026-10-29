@@ -22,7 +22,7 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ sl
   if (!detail) notFound();
 
   const { model: m, limits, routes } = detail;
-  const apiBase = process.env.PUBLIC_API_BASE_URL || "http://localhost:4000";
+  const apiBase = process.env.PUBLIC_API_BASE_URL || "https://prorouter.in";
   const curl = `curl ${apiBase}/v1/chat/completions \\
   -H "Authorization: Bearer $PROROUTER_API_KEY" \\
   -H "Content-Type: application/json" \\

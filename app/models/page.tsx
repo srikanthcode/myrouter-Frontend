@@ -108,6 +108,16 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
         {/* Filters */}
         <div className="mb-6 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11.5px] uppercase tracking-wide text-mut2">Tier</span>
+            <Link href={buildQuery(current, { free: undefined })} aria-current={!free ? "page" : undefined} className={cx(chipBase, !free ? chipActive : chipIdle)}>
+              All
+            </Link>
+            <Link href={buildQuery(current, { free: "true" })} aria-current={free === "true" ? "page" : undefined} className={cx(chipBase, free === "true" ? chipActive : chipIdle)}>
+              Free only
+            </Link>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11.5px] uppercase tracking-wide text-mut2">Use case</span>
             {categories.map((c) => (
               <Link key={c.key || "all"} href={buildQuery(current, { category: c.key || undefined })} aria-current={category === c.key ? "page" : undefined} className={cx(chipBase, category === c.key ? chipActive : chipIdle)}>
@@ -184,6 +194,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
                 <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-relaxed text-mut">{m.description}</p>
 
                 <div className="mt-4 flex flex-wrap gap-1.5">
+                  {m.isFree && <Badge tone="free">FREE</Badge>}
                   <Badge tone="neutral">{m.providerName}</Badge>
                   <Badge tone="neutral">
                     <span className="font-mono tabular-nums">{compactNumber(m.contextWindow)}</span> ctx
@@ -197,7 +208,9 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-mut2">Input / output</div>
                     <div className="mt-0.5 font-mono text-[12.5px] tabular-nums text-fg">
-                      {`${formatPerMillion(m.pricing.inputPerMillion)} / ${formatPerMillion(m.pricing.outputPerMillion)}`}
+                      {m.isFree || (m.pricing.inputPerMillion === 0 && m.pricing.outputPerMillion === 0)
+                        ? "₹0 (Free tier)"
+                        : `${formatPerMillion(m.pricing.inputPerMillion)} / ${formatPerMillion(m.pricing.outputPerMillion)}`}
                     </div>
                   </div>
                   <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent opacity-0 transition-opacity duration-200 group-hover:opacity-100">

@@ -4,7 +4,7 @@ import { ArrowDown, ArrowRight, ArrowUp, Search, SearchX } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { Badge, Button, EmptyState, Input } from "@/components/ui";
 import { cx } from "@/lib/api";
-import { compactNumber, fetchJson, formatPerMillion, type ModelSummary, type ProviderSummary } from "@/lib/server-api";
+import { compactNumber, fetchJson, formatPerMillion, getFilteredDefaultModels, DEFAULT_PROVIDERS, type ModelSummary, type ProviderSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Models",
@@ -74,8 +74,8 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
     fetchJson<ProviderSummary[]>("/providers"),
   ]);
 
-  const models = modelsRes?.items ?? [];
-  const providers = providersRes ?? [];
+  const models = modelsRes?.items && modelsRes.items.length > 0 ? modelsRes.items : getFilteredDefaultModels({ q, provider, free, category, sort });
+  const providers = providersRes && providersRes.length > 0 ? providersRes : DEFAULT_PROVIDERS;
   const current = { q, provider, free, category, sort: sort === "popularity" ? "" : sort };
 
   return (

@@ -639,10 +639,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const reqId = "chatcmpl-" + Math.random().toString(36).slice(2, 11);
     const createdTimestamp = Math.floor(Date.now() / 1000);
 
-    // Identity handling:
+    // Identity & Persona handling:
     // If the client (Cline, Claude Code, etc.) has its own system message, preserve it 100% untouched!
-    // If NO system message was provided (e.g. web playground or simple curl chat), supply the model's true name
-    // in natural plain text without asterisks or bold markdown!
+    // If NO system message was provided (e.g. web playground or simple curl chat), supply the model's true identity,
+    // with friendly, intelligent emojis (👋, 😊, ✨, 🚀, 💻, 💡) matching modern frontier models, and strictly no ** asterisks!
     const incomingMessages = Array.isArray(payload.messages) ? [...payload.messages] : [];
     const hasSystemMessage = incomingMessages.some(
       (m: unknown) =>
@@ -661,7 +661,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     let effectiveMessages = incomingMessages;
     if (!hasSystemMessage) {
       const modelOwner = ownerName ? ` (developed by ${ownerName})` : "";
-      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, an advanced AI model. When asked who you are, what model you are, or what your name is, introduce yourself naturally in plain text without using markdown bold or asterisks (never wrap your name or company in ** or *). Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
+      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, a powerful, intelligent frontier AI model. Be warm, helpful, and engaging, naturally incorporating expressive, friendly emojis (such as 👋, 😊, ✨, 🚀, 💻, 💡) appropriately in your greetings and conversational replies. Introduce yourself naturally in plain text without using markdown bold or asterisks (never wrap your name or company in ** or *). Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
       effectiveMessages = [
         { role: "system", content: systemPrompt },
         ...incomingMessages,

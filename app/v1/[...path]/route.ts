@@ -499,11 +499,13 @@ async function streamTokenJuice(
   reqId: string,
   createdTimestamp: number,
   requestedRawModel: string,
+  effectiveMessages: unknown[],
   payload: Record<string, unknown>
 ) {
   const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
   const upstreamBody = {
     ...payload,
+    messages: effectiveMessages,
     model: TOKENJUICE_MODEL,
     stream: true,
   };
@@ -620,6 +622,34 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const reqId = "chatcmpl-" + Math.random().toString(36).slice(2, 11);
     const createdTimestamp = Math.floor(Date.now() / 1000);
 
+    // Identity handling:
+    // If the client (Cline, Claude Code, etc.) has its own system message, preserve it 100% untouched!
+    // If NO system message was provided (e.g. web playground or simple curl chat), supply the model's true name
+    // so it naturally introduces itself as Kimi K2.7 Code, GLM-5.3, etc. instead of generic OpenAI ChatGPT!
+    const incomingMessages = Array.isArray(payload.messages) ? [...payload.messages] : [];
+    const hasSystemMessage = incomingMessages.some(
+      (m: unknown) =>
+        m &&
+        typeof m === "object" &&
+        ("role" in m) &&
+        ((m as { role?: string }).role === "system" || (m as { role?: string }).role === "developer")
+    );
+
+    const activeMeta = ALL_MODELS.find(
+      (m) => m.id.toLowerCase() === requestedRawModel.toLowerCase()
+    );
+    const modelDisplayName = activeMeta ? activeMeta.name : requestedRawModel;
+
+    let effectiveMessages = incomingMessages;
+    if (!hasSystemMessage) {
+      const modelOwner = activeMeta?.owned_by ? ` (developed by ${activeMeta.owned_by})` : "";
+      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, an advanced AI model. When asked who you are, what model you are, or what your name is, state clearly and naturally that you are ${modelDisplayName}. Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
+      effectiveMessages = [
+        { role: "system", content: systemPrompt },
+        ...incomingMessages,
+      ];
+    }
+
     const isTieredFreemodel = FREEMODELS_TIERED_MODELS.has(requestedRawModel.toLowerCase());
 
     // ── A) STREAMING MODE ──
@@ -648,7 +678,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                 headers: FREEMODELS_HEADERS,
                 body: JSON.stringify({
                   modelId: freemodelsModel,
-                  messages: payload.messages,
+                  messages: effectiveMessages,
                   stream: true,
                 }),
               });
@@ -697,13 +727,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               return;
             } catch {
               // Seamless fallback to TokenJuice if freemodels worker is unreachable
-              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, payload);
+              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload);
               return;
             }
           }
 
           // ── Option 2: All Other Models -> TokenJuice DeepSeek V4.1 Engine ──
-          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, payload);
+          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload);
         },
       });
 
@@ -728,7 +758,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           headers: FREEMODELS_HEADERS,
           body: JSON.stringify({
             modelId: freemodelsModel,
-            messages: payload.messages,
+            messages: effectiveMessages,
             stream: false,
           }),
           signal: AbortSignal.timeout(28000),
@@ -766,6 +796,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
       ...payload,
+      messages: effectiveMessages,
       model: TOKENJUICE_MODEL,
     };
 

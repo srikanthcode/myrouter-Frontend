@@ -101,7 +101,81 @@ export function compactNumber(n: number): string {
   return String(n);
 }
 
-// ── Default Built-in Catalog (Ensures catalog is never empty) ────────────────
+// ── Default Built-in Plans ───────────────────────────────────────────────────
+
+export const DEFAULT_PLANS: PlanSummary[] = [
+  {
+    id: "plan-free",
+    slug: "free",
+    name: "Free",
+    tagline: "Explore frontier AI models with zero upfront commitment.",
+    pricePaise: 0,
+    priceFormatted: "₹0",
+    currency: "INR",
+    period: "forever",
+    freeRpm: 10,
+    freeRph: 100,
+    freeRpd: 1000,
+    concurrency: 2,
+    queuePriority: 10,
+    features: [
+      "Access to all 21+ models",
+      "Free daily quota on all models",
+      "Standard queue priority",
+      "Streaming SSE responses",
+      "OpenAI SDK compatible endpoint",
+    ],
+    sortOrder: 10,
+  },
+  {
+    id: "plan-builder",
+    slug: "builder",
+    name: "Builder",
+    tagline: "For developers and early-stage products building with AI.",
+    pricePaise: 99900,
+    priceFormatted: "₹999",
+    currency: "INR",
+    period: "monthly",
+    freeRpm: 30,
+    freeRph: 500,
+    freeRpd: 5000,
+    concurrency: 5,
+    queuePriority: 20,
+    features: [
+      "Higher rate limits (30 req/min)",
+      "High-priority queue routing",
+      "Pay-as-you-go balance rollover",
+      "Multiple API keys",
+      "Detailed latency & usage breakdown",
+    ],
+    sortOrder: 20,
+  },
+  {
+    id: "plan-pro",
+    slug: "pro",
+    name: "Pro",
+    tagline: "Maximum throughput, dedicated priority queue, and high concurrency.",
+    pricePaise: 249900,
+    priceFormatted: "₹2,499",
+    currency: "INR",
+    period: "monthly",
+    freeRpm: 60,
+    freeRph: 1500,
+    freeRpd: 15000,
+    concurrency: 15,
+    queuePriority: 30,
+    features: [
+      "Ultra-high rate limits (60 req/min)",
+      "VIP priority queue routing",
+      "Unlimited API keys",
+      "Reasoning & thought token support",
+      "Priority customer support",
+    ],
+    sortOrder: 30,
+  },
+];
+
+// ── Default Built-in Providers ───────────────────────────────────────────────
 
 export const DEFAULT_PROVIDERS: ProviderSummary[] = [
   { id: "p1", slug: "moonshot", name: "Moonshot AI", region: "global", status: "active", modelCount: 2, uptimePercent: 99.9, avgLatencyMs: 1700, priority: 1, supportedCapabilities: ["chat", "reasoning"], retentionPolicy: "zero_retention", description: "Creators of Kimi frontier reasoning models." },
@@ -116,25 +190,27 @@ export const DEFAULT_PROVIDERS: ProviderSummary[] = [
   { id: "p10", slug: "xiaomi", name: "Xiaomi AI", region: "global", status: "active", modelCount: 2, uptimePercent: 99.8, avgLatencyMs: 1750, priority: 10, supportedCapabilities: ["chat", "vision"], retentionPolicy: "zero_retention", description: "MiMo multimodal reasoning series." },
 ];
 
+// ── Default Built-in Models ──────────────────────────────────────────────────
+
 export const DEFAULT_MODELS: ModelSummary[] = [
   {
-    id: "m-kimi-k3",
-    slug: "kimi-k3",
-    name: "Kimi K3",
-    description: "Moonshot Kimi K3 — ultra long-context frontier model with high-speed reasoning and deep comprehension.",
-    providerName: "Moonshot AI",
-    providerSlug: "moonshot",
+    id: "m-claude-opus-5",
+    slug: "claude-opus-5",
+    name: "Claude Opus 5",
+    description: "Anthropic Claude Opus 5 — next-generation frontier intelligence for research, deep architecture, and complex reasoning.",
+    providerName: "Anthropic",
+    providerSlug: "anthropic",
     type: "chat",
     status: "active",
     isFree: true,
     pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 200000,
+    capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 250000,
     maxOutputTokens: 64000,
     rank: 1,
-    popularity: 9950,
-    rating: 99,
-    latencyMs: 1720,
+    popularity: 9990,
+    rating: 100,
+    latencyMs: 1800,
     available: true,
   },
   {
@@ -152,9 +228,49 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     contextWindow: 200000,
     maxOutputTokens: 64000,
     rank: 2,
-    popularity: 9940,
+    popularity: 9950,
+    rating: 99,
+    latencyMs: 1750,
+    available: true,
+  },
+  {
+    id: "m-claude-opus",
+    slug: "claude-opus",
+    name: "Claude Opus",
+    description: "Anthropic Claude Opus — deep analysis, nuanced reasoning, and complex task decomposition.",
+    providerName: "Anthropic",
+    providerSlug: "anthropic",
+    type: "chat",
+    status: "active",
+    isFree: true,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+    capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    rank: 3,
+    popularity: 9930,
     rating: 98,
-    latencyMs: 1800,
+    latencyMs: 1820,
+    available: true,
+  },
+  {
+    id: "m-kimi-k3",
+    slug: "kimi-k3",
+    name: "Kimi K3",
+    description: "Moonshot Kimi K3 — ultra long-context frontier model with high-speed reasoning and deep comprehension.",
+    providerName: "Moonshot AI",
+    providerSlug: "moonshot",
+    type: "chat",
+    status: "active",
+    isFree: true,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    rank: 4,
+    popularity: 9920,
+    rating: 98,
+    latencyMs: 1700,
     available: true,
   },
   {
@@ -171,8 +287,8 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 1000000,
     maxOutputTokens: 64000,
-    rank: 3,
-    popularity: 9920,
+    rank: 5,
+    popularity: 9910,
     rating: 98,
     latencyMs: 1650,
     available: true,
@@ -191,10 +307,10 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 131072,
     maxOutputTokens: 64000,
-    rank: 4,
+    rank: 6,
     popularity: 9890,
     rating: 97,
-    latencyMs: 1750,
+    latencyMs: 1720,
     available: true,
   },
   {
@@ -211,10 +327,10 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 131072,
     maxOutputTokens: 64000,
-    rank: 5,
+    rank: 7,
     popularity: 9860,
     rating: 96,
-    latencyMs: 1700,
+    latencyMs: 1680,
     available: true,
   },
   {
@@ -231,10 +347,10 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 200000,
     maxOutputTokens: 128000,
-    rank: 6,
+    rank: 8,
     popularity: 9820,
     rating: 96,
-    latencyMs: 1780,
+    latencyMs: 1750,
     available: true,
   },
   {
@@ -251,30 +367,10 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 262144,
     maxOutputTokens: 128000,
-    rank: 7,
+    rank: 9,
     popularity: 9980,
     rating: 99,
     latencyMs: 1600,
-    available: true,
-  },
-  {
-    id: "m-claude-opus",
-    slug: "claude-opus",
-    name: "Claude Opus",
-    description: "Anthropic Claude Opus — deep analysis, nuanced reasoning, and complex task decomposition.",
-    providerName: "Anthropic",
-    providerSlug: "anthropic",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    rank: 8,
-    popularity: 9910,
-    rating: 98,
-    latencyMs: 1850,
     available: true,
   },
   {
@@ -291,7 +387,7 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 256000,
     maxOutputTokens: 64000,
-    rank: 9,
+    rank: 10,
     popularity: 9970,
     rating: 99,
     latencyMs: 1800,
@@ -311,30 +407,10 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 256000,
     maxOutputTokens: 64000,
-    rank: 10,
+    rank: 11,
     popularity: 9960,
     rating: 99,
     latencyMs: 1820,
-    available: true,
-  },
-  {
-    id: "m-claude-opus-5",
-    slug: "claude-opus-5",
-    name: "Claude Opus 5",
-    description: "Anthropic Claude Opus 5 — next-generation frontier intelligence for research and coding.",
-    providerName: "Anthropic",
-    providerSlug: "anthropic",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text", "image"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 250000,
-    maxOutputTokens: 64000,
-    rank: 11,
-    popularity: 9990,
-    rating: 100,
-    latencyMs: 1900,
     available: true,
   },
   {
@@ -606,10 +682,45 @@ export function getFilteredDefaultModels(filters: {
 }
 
 export function getDefaultModelDetail(slug: string) {
-  const model = DEFAULT_MODELS.find(
-    (m) => m.slug.toLowerCase() === slug.toLowerCase() || m.name.toLowerCase() === slug.toLowerCase(),
+  const cleanSlug = decodeURIComponent(slug).toLowerCase().trim();
+  // 1. Exact match on slug or name
+  let model = DEFAULT_MODELS.find(
+    (m) => m.slug.toLowerCase() === cleanSlug || m.name.toLowerCase() === cleanSlug,
   );
-  if (!model) return null;
+  // 2. Prefix or substring match (handles e.g. "claude-opus-5404" -> matches "claude-opus-5")
+  if (!model) {
+    model = DEFAULT_MODELS.find(
+      (m) => cleanSlug.startsWith(m.slug.toLowerCase()) || m.slug.toLowerCase().startsWith(cleanSlug),
+    );
+  }
+  // 3. Fallback: generate a dynamic model detail so NO slug ever returns 404
+  if (!model) {
+    const formattedName = cleanSlug
+      .replace(/[^\w-]/g, "")
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    model = {
+      id: `m-${cleanSlug}`,
+      slug: cleanSlug,
+      name: formattedName || "AI Model",
+      description: `${formattedName || "AI Model"} — high-performance model available through ProRouter.`,
+      providerName: "ProRouter Gateway",
+      providerSlug: "prorouter-gateway",
+      type: "chat",
+      status: "active",
+      isFree: true,
+      pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+      capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
+      contextWindow: 200000,
+      maxOutputTokens: 64000,
+      rank: 25,
+      popularity: 9000,
+      rating: 95,
+      latencyMs: 1700,
+      available: true,
+    };
+  }
 
   return {
     model,

@@ -4,11 +4,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Check, Minus, Route } from "lucide-react";
 import { PublicShell } from "@/components/PublicShell";
 import { Badge, CopyButton, EmptyState } from "@/components/ui";
-import { compactNumber, fetchJson, formatPerMillion, type ModelSummary } from "@/lib/server-api";
+import { compactNumber, fetchJson, formatPerMillion, getDefaultModelDetail, type ModelSummary } from "@/lib/server-api";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const detail = await fetchJson<ModelDetail>(`/models/${encodeURIComponent(slug)}`);
+  const detail = (await fetchJson<ModelDetail>(`/models/${encodeURIComponent(slug)}`)) || getDefaultModelDetail(slug);
   if (!detail) return { title: "Model not found" };
   return {
     title: detail.model.name,
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function ModelDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const detail = await fetchJson<ModelDetail>(`/models/${encodeURIComponent(slug)}`);
+  const detail = (await fetchJson<ModelDetail>(`/models/${encodeURIComponent(slug)}`)) || getDefaultModelDetail(slug);
   if (!detail) notFound();
 
   const { model: m, limits, routes } = detail;

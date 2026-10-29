@@ -26,7 +26,24 @@ interface UsageInfo {
   ttftMs?: number | null;
 }
 
+function cleanAsterisks(text: string): string {
+  if (!text) return text;
+  let res = text;
+  res = res.replace(/(\d+)\s*\*\s*(\d+)/g, "$1 x $2");
+  res = res.replace(/\*{2,3}([^*\n]+)\*{2,3}/g, "$1");
+  res = res.replace(/(^|[^\w*])\*([^*\n]+)\*([^\w*]|$)/g, "$1$2$3");
+  res = res.replace(/^(\s*)\*\s+/gm, "$1- ");
+  res = res.replaceAll("**", "").replaceAll("*", "");
+  return res;
+}
+
 const models: ModelOption[] = [
+  { slug: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
+  { slug: "pr-zenith", name: "Pro Router Zenith" },
+  { slug: "pr-aura", name: "Pro Router Aura" },
+  { slug: "pr-nova", name: "Pro Router Nova" },
+  { slug: "pr-swift", name: "Pro Router Swift" },
+  { slug: "pr-echo", name: "Pro Router Echo" },
   { slug: "deepseek-v4.1-flash-1017", name: "DeepSeek-V4.1-Flash-1017" },
   { slug: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
   { slug: "qwen3.8-27b", name: "Qwen3.8-27B" },
@@ -36,7 +53,6 @@ const models: ModelOption[] = [
   { slug: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash" },
   { slug: "qwen3-coder-next", name: "Qwen3-Coder-Next" },
   { slug: "deepseek-v4-pro-0813", name: "DeepSeek-V4-Pro-0813" },
-  { slug: "kimi-k2.7-code", name: "Kimi K2.7 Code" },
   { slug: "devstral-24b", name: "Devstral 24B" },
   { slug: "claude-sonnet", name: "Claude Sonnet" },
   { slug: "claude-opus", name: "Claude Opus" },
@@ -58,7 +74,7 @@ const models: ModelOption[] = [
 
 export default function ChatPage() {
   const toast = useToast();
-  const [model, setModel] = useState("beam");
+  const [model, setModel] = useState("kimi-k2.7-code");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -154,9 +170,10 @@ export default function ChatPage() {
             const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) {
               acc += delta;
+              const cleanAcc = cleanAsterisks(acc);
               setMessages((cur) => {
                 const copy = [...cur];
-                copy[copy.length - 1] = { role: "assistant", content: acc };
+                copy[copy.length - 1] = { role: "assistant", content: cleanAcc };
                 return copy;
               });
             }
@@ -245,7 +262,7 @@ export default function ChatPage() {
                         m.role === "user" ? "bg-accent text-accent-ink" : "border border-line bg-ink2 text-fg",
                       )}
                     >
-                      {m.content || (streaming && i === messages.length - 1 ? <span className="text-mut2">…</span> : null)}
+                      {cleanAsterisks(m.content) || (streaming && i === messages.length - 1 ? <span className="text-mut2">…</span> : null)}
                     </div>
                   </div>
                 ))

@@ -491,17 +491,19 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id, X-Requested-With, baggage, sentry-trace, *",
 };
 
-// ── Clean markdown bold/asterisks around names so model never replies with **Name** ──
-function stripAsterisksAroundName(text: string, name: string, owner?: string): string {
+// ── Clean all asterisks (*) from text so AI replies never show * ──
+export function cleanAsterisks(text: string): string {
   if (!text) return text;
-  let res = text
-    .replaceAll(`**${name}**`, name)
-    .replaceAll(`*${name}*`, name);
-  if (owner) {
-    res = res
-      .replaceAll(`**${owner}**`, owner)
-      .replaceAll(`*${owner}*`, owner);
-  }
+  let res = text;
+  // Convert math multiplication '2 * 3' to '2 x 3'
+  res = res.replace(/(\d+)\s*\*\s*(\d+)/g, "$1 x $2");
+  // Convert markdown bold/italic **text** or *text* to plain text
+  res = res.replace(/\*{2,3}([^*\n]+)\*{2,3}/g, "$1");
+  res = res.replace(/(^|[^\w*])\*([^*\n]+)\*([^\w*]|$)/g, "$1$2$3");
+  // Convert bullet points "* " at start of lines to "- "
+  res = res.replace(/^(\s*)\*\s+/gm, "$1- ");
+  // Strip any remaining asterisks
+  res = res.replaceAll("**", "").replaceAll("*", "");
   return res;
 }
 
@@ -515,8 +517,7 @@ async function streamTokenJuice(
   requestedRawModel: string,
   effectiveMessages: unknown[],
   payload: Record<string, unknown>,
-  modelDisplayName: string,
-  owner?: string
+  shouldCleanAsterisks = true
 ) {
   const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
   const upstreamBody = {
@@ -561,15 +562,46 @@ async function streamTokenJuice(
     }
 
     const reader = upstreamRes.body.getReader();
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const raw = decoder.decode(value, { stream: true });
-      let mapped = raw.replaceAll(TOKENJUICE_MODEL, requestedRawModel);
-      mapped = stripAsterisksAroundName(mapped, modelDisplayName, owner);
-      controller.enqueue(encoder.encode(mapped));
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) {
+          if (trimmed) controller.enqueue(encoder.encode(line + "\n"));
+          continue;
+        }
+        if (trimmed === "data: [DONE]") {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(trimmed.slice(5).trim());
+          if (parsed.model) parsed.model = requestedRawModel;
+          const delta = parsed.choices?.[0]?.delta;
+          if (delta && typeof delta.content === "string") {
+            let content = delta.content;
+            if (shouldCleanAsterisks) {
+              content = cleanAsterisks(content);
+            }
+            delta.content = content;
+          }
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
+        } catch {
+          let fallback = line.replaceAll(TOKENJUICE_MODEL, requestedRawModel);
+          if (shouldCleanAsterisks) {
+            fallback = cleanAsterisks(fallback);
+          }
+          controller.enqueue(encoder.encode(fallback + "\n"));
+        }
+      }
     }
 
     controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -658,10 +690,11 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const modelDisplayName = activeMeta ? activeMeta.name : requestedRawModel;
     const ownerName = activeMeta?.owned_by;
 
+    const shouldCleanAsterisks = !hasSystemMessage;
     let effectiveMessages = incomingMessages;
     if (!hasSystemMessage) {
       const modelOwner = ownerName ? ` (developed by ${ownerName})` : "";
-      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, a powerful, intelligent frontier AI model. Be warm, helpful, and engaging, naturally incorporating expressive, friendly emojis (such as 👋, 😊, ✨, 🚀, 💻, 💡) appropriately in your greetings and conversational replies. Introduce yourself naturally in plain text without using markdown bold or asterisks (never wrap your name or company in ** or *). Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
+      const systemPrompt = `You are ${modelDisplayName}${modelOwner}, a powerful, intelligent frontier AI model. Be warm, helpful, and engaging, naturally incorporating expressive, friendly emojis (such as 👋, 😊, ✨, 🚀, 💻, 💡) appropriately in your greetings and conversational replies. Introduce yourself naturally in plain text. STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points, use hyphens (-) or numbers (1., 2.). For multiplication in math, use 'x' or '×'. Keep all text completely free of asterisks (*). Never output the * character under any circumstances. Never claim to be ChatGPT or OpenAI unless that is specifically your model name.`;
       effectiveMessages = [
         { role: "system", content: systemPrompt },
         ...incomingMessages,
@@ -727,7 +760,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                     const parsed = JSON.parse(trimmed.slice(5).trim());
                     let content = parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.message?.content ?? "";
                     if (content) {
-                      content = stripAsterisksAroundName(content, modelDisplayName, ownerName);
+                      if (shouldCleanAsterisks) { content = cleanAsterisks(content); }
                       const chunk = `data: ${JSON.stringify({
                         id: reqId,
                         object: "chat.completion.chunk",
@@ -737,7 +770,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                       })}\n\n`;
                       controller.enqueue(encoder.encode(chunk));
                     }
-                  } catch {}
+                  } catch { }
                 }
               }
 
@@ -746,13 +779,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               return;
             } catch {
               // Seamless fallback to TokenJuice if freemodels worker is unreachable
-              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, modelDisplayName, ownerName);
+              await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks);
               return;
             }
           }
 
           // ── Option 2: All Other Models -> TokenJuice DeepSeek V4.1 Engine ──
-          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, modelDisplayName, ownerName);
+          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks);
         },
       });
 
@@ -786,7 +819,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         if (upstreamRes.ok) {
           const data = await upstreamRes.json();
           let content = data.content || data.response || data.choices?.[0]?.message?.content || "";
-          content = stripAsterisksAroundName(content, modelDisplayName, ownerName);
+          if (shouldCleanAsterisks) { content = cleanAsterisks(content); }
           return NextResponse.json(
             {
               id: reqId,
@@ -839,7 +872,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           if (Array.isArray(data.choices)) {
             for (const choice of data.choices) {
               if (choice?.message?.content && typeof choice.message.content === "string") {
-                choice.message.content = stripAsterisksAroundName(choice.message.content, modelDisplayName, ownerName);
+                if (shouldCleanAsterisks) { choice.message.content = cleanAsterisks(choice.message.content); }
               }
             }
           }

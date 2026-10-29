@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60; // Support full inference duration on Vercel
 
 const UPSTREAM_KEY = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts";
 const UPSTREAM_BASE = process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "https://api.tokenjuice.ai/v1";
@@ -32,10 +33,10 @@ export const PRO_TEXT_MODELS: Record<string, ProModelMeta> = {
     systemPrompt: `You are Pro Router Echo, created by Pro Router.
 You are a basic, affordable, ultra-fast text-to-text AI model.
 Style guidelines:
-- Keep responses concise, direct, and factual without conversational filler.
-- Answer everyday questions, produce brief summaries, and provide fast simple chat.
+- Deliver short, clear, direct answers without unnecessary conversational fluff.
+- Excel at quick lookups, concise summaries, factual answers, and simple chat.
 CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Echo (pr-echo), an affordable text-to-text model designed by Pro Router for everyday questions, short answers, summaries, and simple chat."
-Never claim to be DeepSeek, OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Echo.`,
+Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Echo.`,
   },
   "pr-swift": {
     id: "pr-swift",
@@ -52,7 +53,7 @@ Style guidelines:
 - Be cheerful, courteous, polite, and rapid in your explanations.
 - Excel in customer service, FAQs, triage, and live assistance.
 CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Swift (pr-swift), designed for quick responses, customer support, chatbots, and high-volume applications by Pro Router."
-Never claim to be DeepSeek, OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Swift.`,
+Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Swift.`,
   },
   "pr-nova": {
     id: "pr-nova",
@@ -69,7 +70,7 @@ Style guidelines:
 - Provide articulate, well-structured, insightful responses with clear explanations.
 - Help users with creative writing, general reasoning, brainstorming, and daily development assistance.
 CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Nova (pr-nova), your general-purpose premium model for detailed answers, writing, reasoning, and everyday development assistance by Pro Router."
-Never claim to be DeepSeek, OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Nova.`,
+Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Nova.`,
   },
   "pr-aura": {
     id: "pr-aura",
@@ -86,7 +87,7 @@ Style guidelines:
 - Excel at complex multi-step reasoning, long-form analytical writing, comprehensive documentation, and nuanced code generation.
 - Break down challenging problems methodically with high technical rigor, clear headings, and thorough analysis.
 CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Aura (pr-aura), positioned for advanced reasoning, long-form content, complex instructions, and coding assistance by Pro Router."
-Never claim to be DeepSeek, OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Aura.`,
+Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Aura.`,
   },
   "pr-zenith": {
     id: "pr-zenith",
@@ -103,7 +104,7 @@ Style guidelines:
 - Tackle the most demanding analytical tasks, complex software architectures, mathematical proofs, and deep research synthesis.
 - Deliver exhaustive, production-grade, authoritative solutions with extreme precision.
 CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Zenith (pr-zenith), the flagship tier of Pro Router for the most demanding text tasks, complex analysis, and coding workflows."
-Never claim to be DeepSeek, OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Zenith.`,
+Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Zenith.`,
   },
 };
 
@@ -114,18 +115,23 @@ const CORS_HEADERS = {
 };
 
 export function resolveModel(rawName?: string): ProModelMeta {
-  if (!rawName) return PRO_TEXT_MODELS["pr-nova"];
+  if (!rawName) return PRO_TEXT_MODELS["pr-zenith"];
   const m = rawName.toLowerCase().trim();
 
-  if (m === "pr-echo" || m === "echo" || m.includes("echo")) return PRO_TEXT_MODELS["pr-echo"];
-  if (m === "pr-swift" || m === "swift" || m.includes("swift")) return PRO_TEXT_MODELS["pr-swift"];
-  if (m === "pr-nova" || m === "nova" || m.includes("nova")) return PRO_TEXT_MODELS["pr-nova"];
-  if (m === "pr-aura" || m === "aura" || m.includes("aura")) return PRO_TEXT_MODELS["pr-aura"];
-  if (m === "pr-zenith" || m === "zenith" || m.includes("zenith") || m.includes("0128000"))
+  if (m === "pr-echo" || m === "echo") return PRO_TEXT_MODELS["pr-echo"];
+  if (m === "pr-swift" || m === "swift") return PRO_TEXT_MODELS["pr-swift"];
+  if (m === "pr-nova" || m === "nova") return PRO_TEXT_MODELS["pr-nova"];
+  if (m === "pr-aura" || m === "aura") return PRO_TEXT_MODELS["pr-aura"];
+  if (m === "pr-zenith" || m === "zenith" || m.includes("deepseek") || m.includes("0128000"))
     return PRO_TEXT_MODELS["pr-zenith"];
 
-  // Default to Pro Router Nova
-  return PRO_TEXT_MODELS["pr-nova"];
+  // Match prefixes
+  if (m.includes("echo")) return PRO_TEXT_MODELS["pr-echo"];
+  if (m.includes("swift")) return PRO_TEXT_MODELS["pr-swift"];
+  if (m.includes("nova")) return PRO_TEXT_MODELS["pr-nova"];
+  if (m.includes("aura")) return PRO_TEXT_MODELS["pr-aura"];
+
+  return PRO_TEXT_MODELS["pr-zenith"];
 }
 
 function detectIdentityInquiry(messages: any[]): boolean {
@@ -154,10 +160,6 @@ function detectIdentityInquiry(messages: any[]): boolean {
     "introduce yourself",
     "identify yourself",
     "what ai are you",
-    "are you deepseek",
-    "are you claude",
-    "are you chatgpt",
-    "are you openai",
   ];
   return triggers.some((t) => content.includes(t));
 }
@@ -166,20 +168,10 @@ function sanitizeText(text: string, activeModel: ProModelMeta): string {
   if (!text) return text;
   return text
     .replaceAll(UPSTREAM_MODEL, activeModel.name)
-    .replaceAll("DeepSeek-V4.1-Flash-1017", activeModel.name)
-    .replaceAll("DeepSeek-V4.1-Flash", activeModel.name)
-    .replaceAll("DeepSeek-V3", activeModel.name)
-    .replaceAll("DeepSeek-R1", activeModel.name)
-    .replaceAll("DeepSeek-V4", activeModel.name)
-    .replaceAll("DeepSeek", "Pro Router")
-    .replaceAll("deepseek-ai", "prorouter")
-    .replaceAll("deepseek", "prorouter")
     .replaceAll("TokenJuice", "Pro Router")
     .replaceAll("tokenjuice", "prorouter")
     .replaceAll("Claude Sonnet 5.5", activeModel.name)
     .replaceAll("Claude 5.5", activeModel.name)
-    .replaceAll("Claude 3.5 Sonnet", activeModel.name)
-    .replaceAll("Claude 3.7 Sonnet", activeModel.name)
     .replaceAll("Claude", activeModel.name)
     .replaceAll("Anthropic", "Pro Router")
     .replaceAll("anthropic", "prorouter")
@@ -252,7 +244,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       );
     }
 
-    const requestedRawModel = typeof payload.model === "string" ? payload.model : "pr-nova";
+    const requestedRawModel = typeof payload.model === "string" ? payload.model : "pr-zenith";
     const activeModel = resolveModel(requestedRawModel);
     const isStreaming = payload.stream === true;
     const reqId = "chatcmpl-" + Math.random().toString(36).slice(2, 11);
@@ -261,25 +253,29 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const incomingMessages = Array.isArray(payload.messages) ? (payload.messages as any[]) : [];
     const isIdentityInquiry = detectIdentityInquiry(incomingMessages);
 
-    // Dynamic identity instruction injected directly before user query if identity is asked
-    const identityReminder = isIdentityInquiry
-      ? [
-          {
-            role: "system",
-            content: `CRITICAL INSTRUCTION: The user is asking who you are or your name. Your response MUST begin with: "I am ${activeModel.name} (${activeModel.id}), " followed by the rest of your response.`,
-          },
-        ]
-      : [];
+    // CRITICAL: Preserve client system prompt (e.g. Cline, Kilo Code, Cursor tools & schemas)
+    let clientSystem = "";
+    const nonSystemMessages: any[] = [];
+    for (const msg of incomingMessages) {
+      if (msg && msg.role === "system") {
+        const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+        clientSystem += (clientSystem ? "\n\n" : "") + text;
+      } else if (msg) {
+        nonSystemMessages.push(msg);
+      }
+    }
 
-    const systemPromptMessage = {
-      role: "system",
-      content: activeModel.systemPrompt,
-    };
+    const identityRule = isIdentityInquiry
+      ? `\n\n[CRITICAL IDENTITY RULE]\nThe user is asking about your name or who you are. Your very first sentence MUST begin with: "I am ${activeModel.name} (${activeModel.id}), " followed by the rest of your answer.`
+      : "";
+
+    const combinedSystemPrompt = clientSystem
+      ? `${clientSystem}\n\n[AI MODEL IDENTITY]\nYou are ${activeModel.name} (${activeModel.id}). ${activeModel.systemPrompt}${identityRule}`
+      : `${activeModel.systemPrompt}${identityRule}`;
 
     const finalMessages = [
-      systemPromptMessage,
-      ...incomingMessages.filter((m) => m && m.role !== "system"),
-      ...identityReminder,
+      { role: "system", content: combinedSystemPrompt },
+      ...nonSystemMessages,
     ];
 
     const upstreamUrl = `${UPSTREAM_BASE.replace(/\/+$/, "")}/chat/completions`;
@@ -290,19 +286,19 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       temperature: typeof payload.temperature === "number" ? payload.temperature : activeModel.temperature,
     };
 
-    // ── A) STREAMING: Immediate SSE flush (0ms connect latency) ──
+    // ── A) STREAMING: Immediate SSE flush with pass-through ──
     if (isStreaming) {
       const stream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
           const decoder = new TextDecoder();
 
-          // Immediately send initial chunk so client connect timeout (10s) NEVER triggers
+          // Immediately send initial chunk with role so client connect timeout NEVER triggers
           const initialChunk = `data: ${JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
             created: createdTimestamp,
-            model: activeModel.id,
+            model: requestedRawModel,
             choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
           })}\n\n`;
           controller.enqueue(encoder.encode(initialChunk));
@@ -329,12 +325,12 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             clearInterval(pingInterval);
 
             if (!upstreamRes.ok || !upstreamRes.body) {
-              const greeting = `I am ${activeModel.name} (${activeModel.id}), an official text-to-text AI model created by Pro Router. How can I assist you today?`;
+              const greeting = `I am ${activeModel.name} (${activeModel.id}). How can I assist you with your project today?`;
               const errChunk = `data: ${JSON.stringify({
                 id: reqId,
                 object: "chat.completion.chunk",
                 created: createdTimestamp,
-                model: activeModel.id,
+                model: requestedRawModel,
                 choices: [{ index: 0, delta: { content: greeting }, finish_reason: "stop" }],
               })}\n\ndata: [DONE]\n\n`;
               controller.enqueue(encoder.encode(errChunk));
@@ -344,6 +340,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
             const reader = upstreamRes.body.getReader();
             let sentContent = false;
+            let accumulatedReasoning = "";
 
             while (true) {
               const { done, value } = await reader.read();
@@ -352,28 +349,27 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               const raw = decoder.decode(value, { stream: true });
               let sanitized = sanitizeText(raw, activeModel);
 
-              // Map model ID in chunk
-              sanitized = sanitized.replaceAll(UPSTREAM_MODEL, activeModel.id);
+              // Map model ID in chunk to what the client requested
+              sanitized = sanitized.replaceAll(UPSTREAM_MODEL, requestedRawModel);
 
-              // If reasoning_content is present but content isn't, ensure text flows to client
-              if (sanitized.includes('"reasoning_content":') && !sanitized.includes('"content":')) {
-                sanitized = sanitized.replaceAll('"reasoning_content":', '"content":');
-              }
-
-              if (sanitized.includes('"content":')) {
+              // Check if actual content is being sent
+              if (sanitized.includes('"content":') && !sanitized.includes('"content":""') && !sanitized.includes('"content":null')) {
                 sentContent = true;
               }
 
+              // Keep reasoning_content as reasoning_content (do NOT replace with content so tool parsing doesn't break!)
               controller.enqueue(encoder.encode(sanitized));
             }
 
+            // If the model only emitted reasoning tokens and no content tokens, emit the completion
             if (!sentContent) {
+              const fallbackContent = `I am ${activeModel.name} (${activeModel.id}). Request completed successfully.`;
               const endChunk = `data: ${JSON.stringify({
                 id: reqId,
                 object: "chat.completion.chunk",
                 created: createdTimestamp,
-                model: activeModel.id,
-                choices: [{ index: 0, delta: { content: `I am ${activeModel.name} (${activeModel.id}). Ready to assist.` }, finish_reason: "stop" }],
+                model: requestedRawModel,
+                choices: [{ index: 0, delta: { content: fallbackContent }, finish_reason: "stop" }],
               })}\n\n`;
               controller.enqueue(encoder.encode(endChunk));
             }
@@ -386,8 +382,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               id: reqId,
               object: "chat.completion.chunk",
               created: createdTimestamp,
-              model: activeModel.id,
-              choices: [{ index: 0, delta: { content: `I am ${activeModel.name} (${activeModel.id}). Request processed.` }, finish_reason: "stop" }],
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: { content: `I am ${activeModel.name} (${activeModel.id}). Ready to assist.` }, finish_reason: "stop" }],
             })}\n\ndata: [DONE]\n\n`;
             controller.enqueue(encoder.encode(errFallback));
             controller.close();
@@ -406,9 +402,9 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       });
     }
 
-    // ── B) NON-STREAMING: Fast response with 8.5s timeout guard ──
+    // ── B) NON-STREAMING: Pass-through with 28s timeout guard ──
     const abortCtrl = new AbortController();
-    const timeoutId = setTimeout(() => abortCtrl.abort(), 8500);
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 28000);
 
     try {
       const upstreamRes = await fetch(upstreamUrl, {
@@ -425,10 +421,11 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       if (upstreamRes.ok) {
         const data = await upstreamRes.json();
         if (data && typeof data === "object") {
-          data.model = activeModel.id;
+          data.model = requestedRawModel;
           if (Array.isArray(data.choices)) {
             for (const choice of data.choices) {
               if (choice.message) {
+                // If content is null, fallback to reasoning_content for non-streaming clients
                 if (!choice.message.content && choice.message.reasoning_content) {
                   choice.message.content = choice.message.reasoning_content;
                 }
@@ -462,7 +459,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         id: reqId,
         object: "chat.completion",
         created: createdTimestamp,
-        model: activeModel.id,
+        model: requestedRawModel,
         choices: [
           {
             index: 0,

@@ -68,12 +68,12 @@ export default function DashboardHome() {
     ])
       .then(([o, s, a, u]) => {
         setData(o);
-        setSeries(s.items);
-        setActivity(a.items);
-        setUsage(u);
+        setSeries(Array.isArray(s?.items) ? s.items : Array.isArray(s) ? (s as unknown as SeriesPoint[]) : []);
+        setActivity(Array.isArray(a?.items) ? a.items : Array.isArray(a) ? (a as unknown as ActivityItem[]) : []);
+        setUsage(u && typeof u === "object" ? u : { byModel: [], byProvider: [] });
       })
       .catch((e: Error) => setError(e.message));
-  }, []);
+  }, [refresh]);
 
   if (error) return <div className="rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad" role="alert">{error}</div>;
   if (!data)
@@ -85,13 +85,13 @@ export default function DashboardHome() {
       </div>
     );
 
-  const queueReady = data.queue.every((q) => q.running === 0 && q.waiting === 0);
+  const queueReady = Array.isArray(data.queue) ? data.queue.every((q) => q.running === 0 && q.waiting === 0) : true;
   const cards = [
-    { label: "Wallet balance", value: data.balanceFormatted, href: "/dashboard/wallet", icon: Wallet },
-    { label: "Requests today", value: data.today.requests.toLocaleString("en-IN"), href: "/dashboard/activity", icon: Activity },
-    { label: "Tokens today", value: compact(data.today.tokens), href: "/dashboard/usage", icon: Cpu },
-    { label: "Spend today", value: formatINR(data.today.costPaise), href: "/dashboard/wallet", icon: IndianRupee },
-    { label: "Active API keys", value: String(data.activeKeys), href: "/dashboard/keys", icon: KeyRound },
+    { label: "Wallet balance", value: data.balanceFormatted ?? formatINR(data.balancePaise ?? 0), href: "/dashboard/wallet", icon: Wallet },
+    { label: "Requests today", value: (data.today?.requests ?? 0).toLocaleString("en-IN"), href: "/dashboard/activity", icon: Activity },
+    { label: "Tokens today", value: compact(data.today?.tokens ?? 0), href: "/dashboard/usage", icon: Cpu },
+    { label: "Spend today", value: formatINR(data.today?.costPaise ?? 0), href: "/dashboard/wallet", icon: IndianRupee },
+    { label: "Active API keys", value: String(data.activeKeys ?? 1), href: "/dashboard/keys", icon: KeyRound },
     { label: "Plan", value: data.plan?.name ?? "Free", href: "/pricing", icon: CreditCard },
   ];
 
@@ -102,11 +102,11 @@ export default function DashboardHome() {
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Build with every model through one API.</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge tone={queueReady ? "good" : "warn"}>Free queue: {queueReady ? "Ready" : "Busy"}</Badge>
-            <Badge tone={data.astra.active ? "accent" : "neutral"}>
-              {data.astra.active && <Sparkles className="size-3" aria-hidden="true" />}
-              Astra: {data.astra.active ? `${data.astra.daysLeft ?? "?"} days remaining` : "not active"}
+            <Badge tone={data.astra?.active ? "accent" : "neutral"}>
+              {data.astra?.active && <Sparkles className="size-3" aria-hidden="true" />}
+              Astra: {data.astra?.active ? `${data.astra?.daysLeft ?? "?"} days remaining` : "not active"}
             </Badge>
-            <Badge tone="neutral">API requests: {data.month.requests.toLocaleString("en-IN")} this month</Badge>
+            <Badge tone="neutral">API requests: {(data.month?.requests ?? 0).toLocaleString("en-IN")} this month</Badge>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -150,7 +150,7 @@ export default function DashboardHome() {
         <Card className="p-5">
           <h2 className="mb-4 text-sm font-semibold">Model mix · 30 days</h2>
           <UsageBars
-            items={(usage?.byModel ?? []).filter((m) => m.model).map((m) => ({ label: m.model!, value: m.n, hint: `${m.tokens.toLocaleString("en-IN")} tok` }))}
+            items={(usage?.byModel ?? []).filter((m) => m?.model).map((m) => ({ label: m.model!, value: m.n, hint: `${m.tokens.toLocaleString("en-IN")} tok` }))}
             total={(usage?.byModel ?? []).reduce((a, b) => a + b.n, 0)}
           />
         </Card>

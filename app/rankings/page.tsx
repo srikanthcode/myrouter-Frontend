@@ -4,7 +4,7 @@ import { Trophy } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { EmptyState } from "@/components/ui";
 import { cx } from "@/lib/api";
-import { compactNumber, fetchJson, formatPerMillion, type ModelSummary } from "@/lib/server-api";
+import { compactNumber, fetchJson, formatPerMillion, getFilteredDefaultModels, type ModelSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Rankings",
@@ -33,7 +33,8 @@ const chipIdle = "border-line text-mut hover:border-line2 hover:text-fg";
 export default async function RankingsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const board = one(sp.board) ?? "rating";
-  const models = (await fetchJson<{ items: ModelSummary[] }>(`/models?sort=${encodeURIComponent(board)}&limit=50`))?.items ?? [];
+  const res = await fetchJson<{ items: ModelSummary[] }>(`/models?sort=${encodeURIComponent(board)}&limit=50`);
+  const models = res?.items && res.items.length > 0 ? res.items : getFilteredDefaultModels({ sort: board });
 
   return (
     <PublicShell>

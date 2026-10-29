@@ -3,7 +3,7 @@ import { Activity, ArrowRight, ArrowUpRight, ChartColumn, KeyRound, MessageSquar
 import { PublicNav } from "@/components/PublicNav";
 import { Footer } from "@/components/Footer";
 import { Badge, CopyButton } from "@/components/ui";
-import { fetchJson } from "@/lib/server-api";
+import { fetchJson, DEFAULT_MODELS } from "@/lib/server-api";
 
 const curlExample = `curl https://prorouter.in/v1/chat/completions \\
   -H "Authorization: Bearer $PROROUTER_API_KEY" \\
@@ -68,7 +68,7 @@ function CodeWindow({ filename, code }: { filename: string; code: string }) {
 
 export default async function LandingPage() {
   const modelsRes = await fetchJson<{ items: Array<{ slug: string; name: string; description: string }> }>("/models?limit=8");
-  const models = modelsRes?.items ?? [];
+  const models = modelsRes?.items && modelsRes.items.length > 0 ? modelsRes.items : DEFAULT_MODELS.slice(0, 8);
 
   return (
     <div className="min-h-screen">

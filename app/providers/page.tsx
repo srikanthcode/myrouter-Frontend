@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ArrowRight, ServerOff } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { Badge, EmptyState } from "@/components/ui";
-import { fetchJson, type ProviderSummary } from "@/lib/server-api";
+import { fetchJson, DEFAULT_PROVIDERS, type ProviderSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Providers",
@@ -17,7 +17,8 @@ const statusTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 };
 
 export default async function ProvidersPage() {
-  const providers = (await fetchJson<ProviderSummary[]>("/providers")) ?? [];
+  const providersRes = await fetchJson<ProviderSummary[]>("/providers");
+  const providers = providersRes && providersRes.length > 0 ? providersRes : DEFAULT_PROVIDERS;
 
   return (
     <PublicShell>

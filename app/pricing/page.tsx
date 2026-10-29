@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Check, CreditCard, Landmark, ReceiptText, Sparkles, Wallet, Webhook } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { Badge, EmptyState } from "@/components/ui";
-import { fetchJson, type PlanSummary } from "@/lib/server-api";
+import { fetchJson, DEFAULT_PLANS, type PlanSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -53,7 +53,7 @@ export default async function PricingPage() {
     fetchJson<AstraPromo>("/promotions/astra"),
   ]);
 
-  const plans = plansRes?.items ?? [];
+  const plans = plansRes?.items && plansRes.items.length > 0 ? plansRes.items : DEFAULT_PLANS;
   const packages = packagesRes?.items ?? [];
   const campaign = astra?.available ? astra.campaign : null;
 

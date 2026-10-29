@@ -40,7 +40,7 @@ export default function UsagePage() {
         api<{ items: SeriesPoint[] }>(`/dashboard/series?days=${days}`),
       ]);
       setUsage(u);
-      setSeries(s.items);
+      setSeries(Array.isArray(s?.items) ? s.items : Array.isArray(s) ? (s as unknown as SeriesPoint[]) : []);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load usage.");
@@ -55,13 +55,13 @@ export default function UsagePage() {
   if (error) return <div className="rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad" role="alert">{error}</div>;
   if (!usage) return <div className="space-y-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-32 w-full" />)}</div>;
 
-  const totalRequests = usage.byModel.reduce((a, m) => a + m.n, 0);
-  const totalTokens = usage.byModel.reduce((a, m) => a + m.tokens, 0);
-  const totalCost = usage.byModel.reduce((a, m) => a + m.cost, 0);
-  const windowRequests = series.reduce((a, s) => a + s.requests, 0);
-  const windowTokens = series.reduce((a, s) => a + s.tokens, 0);
-  const windowCost = series.reduce((a, s) => a + s.costPaise, 0);
-  const windowErrors = series.reduce((a, s) => a + s.errors, 0);
+  const totalRequests = (usage.byModel || []).reduce((a, m) => a + (m?.n || 0), 0);
+  const totalTokens = (usage.byModel || []).reduce((a, m) => a + (m?.tokens || 0), 0);
+  const totalCost = (usage.byModel || []).reduce((a, m) => a + (m?.cost || 0), 0);
+  const windowRequests = (series || []).reduce((a, s) => a + (s?.requests || 0), 0);
+  const windowTokens = (series || []).reduce((a, s) => a + (s?.tokens || 0), 0);
+  const windowCost = (series || []).reduce((a, s) => a + (s?.costPaise || 0), 0);
+  const windowErrors = (series || []).reduce((a, s) => a + (s?.errors || 0), 0);
   const errorRate = windowRequests > 0 ? (windowErrors / windowRequests) * 100 : 0;
 
   const cards = [

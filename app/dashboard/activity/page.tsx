@@ -47,8 +47,8 @@ export default function ActivityPage() {
       const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
       if (status) params.set("status", status);
       const res = await api<{ total: number; items: ActivityItem[] }>(`/dashboard/activity?${params.toString()}`);
-      setItems(res.items);
-      setTotal(res.total);
+      setItems(Array.isArray(res?.items) ? res.items : Array.isArray(res) ? (res as unknown as ActivityItem[]) : []);
+      setTotal(typeof res?.total === "number" ? res.total : 0);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load activity.");

@@ -123,7 +123,7 @@ export function ModelGrid() {
           </div>
           <h3 className="mt-3 text-[13.5px] font-semibold text-fg">{model.name}</h3>
           <p className="mt-1.5 flex-1 text-[12px] leading-relaxed text-mut">{model.description}</p>
-          <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-mut2">{model.bestFor}</p>
+          <div className="mt-3 border-t border-line pt-2.5 space-y-1"><div className="font-mono text-[10.5px] text-accent font-medium">${model.inputPerMillion.toFixed(2)} in / ${model.outputPerMillion.toFixed(2)} out per 1M</div><p className="text-[11px] text-mut2">{model.bestFor}</p></div>
         </Card>
       ))}
     </div>

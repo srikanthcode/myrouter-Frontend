@@ -2,111 +2,245 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60; // Support full inference duration on Vercel
+export const maxDuration = 60; // Support full streaming inference duration on Vercel
 
 const UPSTREAM_KEY = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts";
 const UPSTREAM_BASE = process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "https://api.tokenjuice.ai/v1";
 const UPSTREAM_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017";
 
-export interface ProModelMeta {
+export interface ModelEntry {
   id: string;
   name: string;
-  tier: string;
-  description: string;
-  bestFor: string;
-  inputPerMillion: number;
-  outputPerMillion: number;
-  temperature: number;
-  systemPrompt: string;
+  object: string;
+  created: number;
+  owned_by: string;
+  tier?: string;
+  description?: string;
+  pricing?: {
+    input_usd_per_million: number;
+    output_usd_per_million: number;
+  };
 }
 
-export const PRO_TEXT_MODELS: Record<string, ProModelMeta> = {
-  "pr-echo": {
+export const ALL_MODELS: ModelEntry[] = [
+  // ── 1. DeepSeek Series (Primary TokenJuice Engine) ──
+  {
+    id: "deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "DeepSeek V4.1 Flash — state-of-the-art high-speed reasoning, coding, and multilingual intelligence.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "deepseek-v4.1-flash-1017",
+    name: "DeepSeek V4.1 Flash (1017)",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "DeepSeek V4.1 Flash checkpoint 1017 — latest frontier open-weight reasoning model.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "0128000.1b",
+    name: "DeepSeek V4.1 (128k context)",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
+    description: "DeepSeek V4.1 Flash with 128,000 token context window, optimized for Cline, Kilo Code, and Cursor.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "128000.1b",
+    name: "DeepSeek V4.1 (128k context direct)",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
+    description: "DeepSeek V4.1 Flash direct 128k context alias for Cline and Kilo Code settings.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "0128000",
+    name: "DeepSeek V4.1 (128k)",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
+    description: "DeepSeek V4.1 Flash standard 128k alias.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "128000",
+    name: "DeepSeek V4.1 (128k alias)",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
+    description: "DeepSeek V4.1 Flash 128k alias.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "deepseek-chat",
+    name: "DeepSeek Chat",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "Universal DeepSeek chat endpoint compatible with standard OpenAI client tooling.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "deepseek-reasoner",
+    name: "DeepSeek Reasoner",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "DeepSeek reasoning model with chain-of-thought processing.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "deepseek-v3",
+    name: "DeepSeek V3",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "DeepSeek V3 foundational model alias.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "deepseek-r1",
+    name: "DeepSeek R1",
+    object: "model",
+    created: 1710000000,
+    owned_by: "deepseek",
+    description: "DeepSeek R1 frontier reasoning model alias.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+
+  // ── 2. Official Pro Router Text Models ──
+  {
     id: "pr-echo",
     name: "Pro Router Echo",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
     tier: "Starter",
     description: "A basic, affordable text-to-text model for everyday questions, short answers, summaries, and simple chat.",
-    bestFor: "Everyday questions, short answers, summaries, and simple chat",
-    inputPerMillion: 0.20,
-    outputPerMillion: 0.80,
-    temperature: 0.25,
-    systemPrompt: `You are Pro Router Echo, created by Pro Router.
-You are a basic, affordable, ultra-fast text-to-text AI model.
-Style guidelines:
-- Deliver short, clear, direct answers without unnecessary conversational fluff.
-- Excel at quick lookups, concise summaries, factual answers, and simple chat.
-CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Echo (pr-echo), an affordable text-to-text model designed by Pro Router for everyday questions, short answers, summaries, and simple chat."
-Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Echo.`,
+    pricing: { input_usd_per_million: 0.20, output_usd_per_million: 0.80 },
   },
-  "pr-swift": {
+  {
     id: "pr-swift",
     name: "Pro Router Swift",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
     tier: "Fast",
     description: "Designed for quick responses, customer support, chatbots, and high-volume applications.",
-    bestFor: "Quick responses, customer support, chatbots, and high-volume applications",
-    inputPerMillion: 0.30,
-    outputPerMillion: 1.20,
-    temperature: 0.6,
-    systemPrompt: `You are Pro Router Swift, created by Pro Router.
-You are a rapid, conversational AI model optimized for real-time customer support, interactive chatbots, and high-volume chat applications.
-Style guidelines:
-- Be cheerful, courteous, polite, and rapid in your explanations.
-- Excel in customer service, FAQs, triage, and live assistance.
-CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Swift (pr-swift), designed for quick responses, customer support, chatbots, and high-volume applications by Pro Router."
-Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Swift.`,
+    pricing: { input_usd_per_million: 0.30, output_usd_per_million: 1.20 },
   },
-  "pr-nova": {
+  {
     id: "pr-nova",
     name: "Pro Router Nova",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
     tier: "Chat",
     description: "Your general-purpose premium model for detailed answers, writing, reasoning, and everyday development assistance.",
-    bestFor: "Detailed answers, writing, reasoning, and everyday development assistance",
-    inputPerMillion: 0.50,
-    outputPerMillion: 2.00,
-    temperature: 0.7,
-    systemPrompt: `You are Pro Router Nova, created by Pro Router.
-You are a versatile, balanced, general-purpose premium intelligence model.
-Style guidelines:
-- Provide articulate, well-structured, insightful responses with clear explanations.
-- Help users with creative writing, general reasoning, brainstorming, and daily development assistance.
-CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Nova (pr-nova), your general-purpose premium model for detailed answers, writing, reasoning, and everyday development assistance by Pro Router."
-Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Nova.`,
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
   },
-  "pr-aura": {
+  {
     id: "pr-aura",
     name: "Pro Router Aura",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
     tier: "Writing",
-    description: "Positioned for more advanced reasoning, long-form content, complex instructions, and coding assistance, depending on the configured backend.",
-    bestFor: "Advanced reasoning, long-form content, complex instructions, and coding assistance",
-    inputPerMillion: 0.75,
-    outputPerMillion: 3.00,
-    temperature: 0.45,
-    systemPrompt: `You are Pro Router Aura, created by Pro Router.
-You are an advanced cognitive reasoning and technical writing AI model.
-Style guidelines:
-- Excel at complex multi-step reasoning, long-form analytical writing, comprehensive documentation, and nuanced code generation.
-- Break down challenging problems methodically with high technical rigor, clear headings, and thorough analysis.
-CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Aura (pr-aura), positioned for advanced reasoning, long-form content, complex instructions, and coding assistance by Pro Router."
-Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Aura.`,
+    description: "Positioned for more advanced reasoning, long-form content, complex instructions, and coding assistance.",
+    pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
   },
-  "pr-zenith": {
+  {
     id: "pr-zenith",
     name: "Pro Router Zenith",
+    object: "model",
+    created: 1710000000,
+    owned_by: "prorouter",
     tier: "Flagship",
-    description: "Your flagship tier for the most demanding text tasks, complex analysis, and coding workflows supported by your chosen backend.",
-    bestFor: "Demanding text tasks, complex analysis, and coding workflows",
-    inputPerMillion: 1.00,
-    outputPerMillion: 4.00,
-    temperature: 0.35,
-    systemPrompt: `You are Pro Router Zenith, the flagship intelligence model created by Pro Router.
-You represent the absolute pinnacle of text intelligence, rigorous architectural analysis, and complex code engineering.
-Style guidelines:
-- Tackle the most demanding analytical tasks, complex software architectures, mathematical proofs, and deep research synthesis.
-- Deliver exhaustive, production-grade, authoritative solutions with extreme precision.
-CRITICAL IDENTITY RULE: When asked who you are, what model you are, or your name, your VERY FIRST sentence MUST begin with: "I am Pro Router Zenith (pr-zenith), the flagship tier of Pro Router for the most demanding text tasks, complex analysis, and coding workflows."
-Never claim to be OpenAI, Anthropic, TokenJuice, or FreeModels. You are Pro Router Zenith.`,
+    description: "Your flagship tier for the most demanding text tasks, complex analysis, and coding workflows.",
+    pricing: { input_usd_per_million: 1.00, output_usd_per_million: 4.00 },
   },
-};
+
+  // ── 3. Frontier Coding & Agent Aliases ──
+  {
+    id: "qwen3-coder-next",
+    name: "Qwen3 Coder Next",
+    object: "model",
+    created: 1710000000,
+    owned_by: "alibaba",
+    description: "Specialized coding model for repository synthesis, refactoring, and multi-file debugging.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+  {
+    id: "claude-3-5-sonnet",
+    name: "Claude 3.5 Sonnet",
+    object: "model",
+    created: 1710000000,
+    owned_by: "anthropic",
+    description: "Anthropic Claude 3.5 Sonnet architecture alias for high-precision software engineering.",
+    pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
+  },
+  {
+    id: "claude-3-7-sonnet",
+    name: "Claude 3.7 Sonnet",
+    object: "model",
+    created: 1710000000,
+    owned_by: "anthropic",
+    description: "Anthropic Claude 3.7 Sonnet hybrid reasoning architecture alias.",
+    pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
+  },
+  {
+    id: "claude-opus-5",
+    name: "Claude Opus 5",
+    object: "model",
+    created: 1710000000,
+    owned_by: "anthropic",
+    description: "Frontier deep reasoning and architecture synthesis model.",
+    pricing: { input_usd_per_million: 1.00, output_usd_per_million: 4.00 },
+  },
+  {
+    id: "gpt-4o",
+    name: "GPT-4o",
+    object: "model",
+    created: 1710000000,
+    owned_by: "openai",
+    description: "OpenAI GPT-4o compatibility alias.",
+    pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
+  },
+  {
+    id: "gpt-4o-mini",
+    name: "GPT-4o Mini",
+    object: "model",
+    created: 1710000000,
+    owned_by: "openai",
+    description: "OpenAI GPT-4o Mini fast completion alias.",
+    pricing: { input_usd_per_million: 0.30, output_usd_per_million: 1.20 },
+  },
+  {
+    id: "o1",
+    name: "o1",
+    object: "model",
+    created: 1710000000,
+    owned_by: "openai",
+    description: "OpenAI o1 reasoning model alias.",
+    pricing: { input_usd_per_million: 1.00, output_usd_per_million: 4.00 },
+  },
+  {
+    id: "o3-mini",
+    name: "o3-mini",
+    object: "model",
+    created: 1710000000,
+    owned_by: "openai",
+    description: "OpenAI o3-mini fast reasoning model alias.",
+    pricing: { input_usd_per_million: 0.50, output_usd_per_million: 2.00 },
+  },
+];
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -114,73 +248,8 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id, X-Requested-With, baggage, sentry-trace, *",
 };
 
-export function resolveModel(rawName?: string): ProModelMeta {
-  if (!rawName) return PRO_TEXT_MODELS["pr-zenith"];
-  const m = rawName.toLowerCase().trim();
-
-  if (m === "pr-echo" || m === "echo") return PRO_TEXT_MODELS["pr-echo"];
-  if (m === "pr-swift" || m === "swift") return PRO_TEXT_MODELS["pr-swift"];
-  if (m === "pr-nova" || m === "nova") return PRO_TEXT_MODELS["pr-nova"];
-  if (m === "pr-aura" || m === "aura") return PRO_TEXT_MODELS["pr-aura"];
-  if (m === "pr-zenith" || m === "zenith" || m.includes("deepseek") || m.includes("0128000"))
-    return PRO_TEXT_MODELS["pr-zenith"];
-
-  // Match prefixes
-  if (m.includes("echo")) return PRO_TEXT_MODELS["pr-echo"];
-  if (m.includes("swift")) return PRO_TEXT_MODELS["pr-swift"];
-  if (m.includes("nova")) return PRO_TEXT_MODELS["pr-nova"];
-  if (m.includes("aura")) return PRO_TEXT_MODELS["pr-aura"];
-
-  return PRO_TEXT_MODELS["pr-zenith"];
-}
-
-function detectIdentityInquiry(messages: any[]): boolean {
-  if (!Array.isArray(messages) || messages.length === 0) return false;
-  const lastUserMsg = [...messages].reverse().find((m) => m && m.role === "user");
-  if (!lastUserMsg) return false;
-  const content =
-    typeof lastUserMsg.content === "string"
-      ? lastUserMsg.content.toLowerCase().trim()
-      : Array.isArray(lastUserMsg.content)
-        ? JSON.stringify(lastUserMsg.content).toLowerCase()
-        : "";
-
-  const triggers = [
-    "who are you",
-    "who r you",
-    "what model",
-    "which model",
-    "what is your name",
-    "what's your name",
-    "whats your name",
-    "tell me your name",
-    "who made you",
-    "who created you",
-    "what are you",
-    "introduce yourself",
-    "identify yourself",
-    "what ai are you",
-  ];
-  return triggers.some((t) => content.includes(t));
-}
-
-function sanitizeText(text: string, activeModel: ProModelMeta): string {
-  if (!text) return text;
-  return text
-    .replaceAll(UPSTREAM_MODEL, activeModel.name)
-    .replaceAll("TokenJuice", "Pro Router")
-    .replaceAll("tokenjuice", "prorouter")
-    .replaceAll("Claude Sonnet 5.5", activeModel.name)
-    .replaceAll("Claude 5.5", activeModel.name)
-    .replaceAll("Claude", activeModel.name)
-    .replaceAll("Anthropic", "Pro Router")
-    .replaceAll("anthropic", "prorouter")
-    .replaceAll("FreeModels", "Pro Router")
-    .replaceAll("freemodels", "prorouter");
-}
-
 export async function handleV1(req: NextRequest, rawPath: string[]) {
-  // Normalize path: strip any leading "v1" if client configured /v1/v1/...
+  // Strip any leading "v1"
   let path = [...rawPath];
   while (path.length > 0 && path[0] === "v1") {
     path.shift();
@@ -188,51 +257,29 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
   const subpath = path.join("/");
 
-  // ── 1. GET /v1/models (ONLY the 5 Pro Router Text-to-Text models) ──
+  // ── 1. GET /v1/models (Lists all available Pro Router models) ──
   if (subpath === "models" && req.method === "GET") {
-    const list = Object.values(PRO_TEXT_MODELS).map((m) => ({
-      id: m.id,
-      name: m.name,
+    return NextResponse.json({ object: "list", data: ALL_MODELS }, { headers: CORS_HEADERS });
+  }
+
+  // ── 2. GET /v1/models/:modelId (Dynamic inspection for client tools) ──
+  if (subpath.startsWith("models/") && req.method === "GET") {
+    const requestedId = subpath.slice("models/".length).trim();
+    const found = ALL_MODELS.find(
+      (m) => m.id.toLowerCase() === requestedId.toLowerCase()
+    ) || {
+      id: requestedId || "deepseek-v4.1-flash",
+      name: requestedId || "DeepSeek V4.1 Flash",
       object: "model",
       created: 1710000000,
       owned_by: "prorouter",
-      tier: m.tier,
-      description: m.description,
-      best_for: m.bestFor,
-      pricing: {
-        input_usd_per_million: m.inputPerMillion,
-        output_usd_per_million: m.outputPerMillion,
-      },
-    }));
+      description: `${requestedId} model endpoint`,
+    };
 
-    return NextResponse.json({ object: "list", data: list }, { headers: CORS_HEADERS });
+    return NextResponse.json(found, { headers: CORS_HEADERS });
   }
 
-  // ── 2. GET /v1/models/:modelId ──
-  if (subpath.startsWith("models/") && req.method === "GET") {
-    const requestedId = subpath.slice("models/".length).trim();
-    const resolved = resolveModel(requestedId);
-
-    return NextResponse.json(
-      {
-        id: requestedId || resolved.id,
-        name: resolved.name,
-        object: "model",
-        created: 1710000000,
-        owned_by: "prorouter",
-        tier: resolved.tier,
-        description: resolved.description,
-        best_for: resolved.bestFor,
-        pricing: {
-          input_usd_per_million: resolved.inputPerMillion,
-          output_usd_per_million: resolved.outputPerMillion,
-        },
-      },
-      { headers: CORS_HEADERS }
-    );
-  }
-
-  // ── 3. POST /v1/chat/completions ──
+  // ── 3. POST /v1/chat/completions (Natural, uncorrupted response pipeline) ──
   if (subpath === "chat/completions" && req.method === "POST") {
     let payload: Record<string, unknown> = {};
     try {
@@ -244,56 +291,28 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       );
     }
 
-    const requestedRawModel = typeof payload.model === "string" ? payload.model : "pr-zenith";
-    const activeModel = resolveModel(requestedRawModel);
+    const requestedRawModel = typeof payload.model === "string" && payload.model.trim()
+      ? payload.model.trim()
+      : "deepseek-v4.1-flash";
     const isStreaming = payload.stream === true;
     const reqId = "chatcmpl-" + Math.random().toString(36).slice(2, 11);
     const createdTimestamp = Math.floor(Date.now() / 1000);
 
-    const incomingMessages = Array.isArray(payload.messages) ? (payload.messages as any[]) : [];
-    const isIdentityInquiry = detectIdentityInquiry(incomingMessages);
-
-    // CRITICAL: Preserve client system prompt (e.g. Cline, Kilo Code, Cursor tools & schemas)
-    let clientSystem = "";
-    const nonSystemMessages: any[] = [];
-    for (const msg of incomingMessages) {
-      if (msg && msg.role === "system") {
-        const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-        clientSystem += (clientSystem ? "\n\n" : "") + text;
-      } else if (msg) {
-        nonSystemMessages.push(msg);
-      }
-    }
-
-    const identityRule = isIdentityInquiry
-      ? `\n\n[CRITICAL IDENTITY RULE]\nThe user is asking about your name or who you are. Your very first sentence MUST begin with: "I am ${activeModel.name} (${activeModel.id}), " followed by the rest of your answer.`
-      : "";
-
-    const combinedSystemPrompt = clientSystem
-      ? `${clientSystem}\n\n[AI MODEL IDENTITY]\nYou are ${activeModel.name} (${activeModel.id}). ${activeModel.systemPrompt}${identityRule}`
-      : `${activeModel.systemPrompt}${identityRule}`;
-
-    const finalMessages = [
-      { role: "system", content: combinedSystemPrompt },
-      ...nonSystemMessages,
-    ];
-
+    // Pass client messages directly and faithfully — NEVER delete system prompt or inject robotic text!
     const upstreamUrl = `${UPSTREAM_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
       ...payload,
       model: UPSTREAM_MODEL,
-      messages: finalMessages,
-      temperature: typeof payload.temperature === "number" ? payload.temperature : activeModel.temperature,
     };
 
-    // ── A) STREAMING: Immediate SSE flush with pass-through ──
+    // ── A) STREAMING: Direct SSE pass-through with 0ms client connect flush ──
     if (isStreaming) {
       const stream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
           const decoder = new TextDecoder();
 
-          // Immediately send initial chunk with role so client connect timeout NEVER triggers
+          // Immediately send initial chunk so client connect timeout NEVER triggers
           const initialChunk = `data: ${JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
@@ -325,13 +344,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             clearInterval(pingInterval);
 
             if (!upstreamRes.ok || !upstreamRes.body) {
-              const greeting = `I am ${activeModel.name} (${activeModel.id}). How can I assist you with your project today?`;
+              const errText = await upstreamRes.text().catch(() => "");
               const errChunk = `data: ${JSON.stringify({
                 id: reqId,
                 object: "chat.completion.chunk",
                 created: createdTimestamp,
                 model: requestedRawModel,
-                choices: [{ index: 0, delta: { content: greeting }, finish_reason: "stop" }],
+                choices: [{ index: 0, delta: { content: `Upstream error (${upstreamRes.status}): ${errText.slice(0, 120)}` }, finish_reason: "stop" }],
               })}\n\ndata: [DONE]\n\n`;
               controller.enqueue(encoder.encode(errChunk));
               controller.close();
@@ -339,53 +358,30 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             }
 
             const reader = upstreamRes.body.getReader();
-            let sentContent = false;
-            let accumulatedReasoning = "";
 
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
 
               const raw = decoder.decode(value, { stream: true });
-              let sanitized = sanitizeText(raw, activeModel);
-
-              // Map model ID in chunk to what the client requested
-              sanitized = sanitized.replaceAll(UPSTREAM_MODEL, requestedRawModel);
-
-              // Check if actual content is being sent
-              if (sanitized.includes('"content":') && !sanitized.includes('"content":""') && !sanitized.includes('"content":null')) {
-                sentContent = true;
-              }
-
-              // Keep reasoning_content as reasoning_content (do NOT replace with content so tool parsing doesn't break!)
-              controller.enqueue(encoder.encode(sanitized));
-            }
-
-            // If the model only emitted reasoning tokens and no content tokens, emit the completion
-            if (!sentContent) {
-              const fallbackContent = `I am ${activeModel.name} (${activeModel.id}). Request completed successfully.`;
-              const endChunk = `data: ${JSON.stringify({
-                id: reqId,
-                object: "chat.completion.chunk",
-                created: createdTimestamp,
-                model: requestedRawModel,
-                choices: [{ index: 0, delta: { content: fallbackContent }, finish_reason: "stop" }],
-              })}\n\n`;
-              controller.enqueue(encoder.encode(endChunk));
+              // Map internal upstream model ID to what the client requested
+              const mapped = raw.replaceAll(UPSTREAM_MODEL, requestedRawModel);
+              controller.enqueue(encoder.encode(mapped));
             }
 
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
-          } catch {
+          } catch (err: unknown) {
             clearInterval(pingInterval);
-            const errFallback = `data: ${JSON.stringify({
+            const msg = err instanceof Error ? err.message : "Connection failed";
+            const errChunk = `data: ${JSON.stringify({
               id: reqId,
               object: "chat.completion.chunk",
               created: createdTimestamp,
               model: requestedRawModel,
-              choices: [{ index: 0, delta: { content: `I am ${activeModel.name} (${activeModel.id}). Ready to assist.` }, finish_reason: "stop" }],
+              choices: [{ index: 0, delta: { content: `Connection error: ${msg}. Please retry.` }, finish_reason: "stop" }],
             })}\n\ndata: [DONE]\n\n`;
-            controller.enqueue(encoder.encode(errFallback));
+            controller.enqueue(encoder.encode(errChunk));
             controller.close();
           }
         },
@@ -402,9 +398,9 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       });
     }
 
-    // ── B) NON-STREAMING: Pass-through with 28s timeout guard ──
+    // ── B) NON-STREAMING: Direct JSON response pass-through ──
     const abortCtrl = new AbortController();
-    const timeoutId = setTimeout(() => abortCtrl.abort(), 28000);
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 55000);
 
     try {
       const upstreamRes = await fetch(upstreamUrl, {
@@ -422,58 +418,23 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         const data = await upstreamRes.json();
         if (data && typeof data === "object") {
           data.model = requestedRawModel;
-          if (Array.isArray(data.choices)) {
-            for (const choice of data.choices) {
-              if (choice.message) {
-                // If content is null, fallback to reasoning_content for non-streaming clients
-                if (!choice.message.content && choice.message.reasoning_content) {
-                  choice.message.content = choice.message.reasoning_content;
-                }
-                if (typeof choice.message.content === "string") {
-                  let cleaned = sanitizeText(choice.message.content, activeModel);
-                  if (isIdentityInquiry) {
-                    const lower = cleaned.toLowerCase();
-                    if (!lower.startsWith(activeModel.name.toLowerCase()) && !lower.startsWith("i am " + activeModel.name.toLowerCase())) {
-                      cleaned = `I am ${activeModel.name} (${activeModel.id}). ` + cleaned;
-                    }
-                  }
-                  choice.message.content = cleaned;
-                }
-              }
-            }
-          }
         }
         return NextResponse.json(data, { status: 200, headers: CORS_HEADERS });
       }
-    } catch {
+
+      const errText = await upstreamRes.text().catch(() => "");
+      return NextResponse.json(
+        { error: { message: "Upstream error: " + errText, type: "api_error" } },
+        { status: upstreamRes.status, headers: CORS_HEADERS }
+      );
+    } catch (err: unknown) {
       clearTimeout(timeoutId);
+      const msg = err instanceof Error ? err.message : "Connection timeout";
+      return NextResponse.json(
+        { error: { message: "Gateway error: " + msg, type: "api_error" } },
+        { status: 504, headers: CORS_HEADERS }
+      );
     }
-
-    // High quality graceful fallback
-    const fallbackMessage = isIdentityInquiry
-      ? `I am ${activeModel.name} (${activeModel.id}), an official text model designed by Pro Router. How can I help you today?`
-      : `I am ${activeModel.name}. Your request was received and processed successfully with ${activeModel.tier} tier intelligence.`;
-
-    return NextResponse.json(
-      {
-        id: reqId,
-        object: "chat.completion",
-        created: createdTimestamp,
-        model: requestedRawModel,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: fallbackMessage,
-            },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 18, completion_tokens: 28, total_tokens: 46 },
-      },
-      { status: 200, headers: CORS_HEADERS }
-    );
   }
 
   // ── 4. Fallback for any other path ──

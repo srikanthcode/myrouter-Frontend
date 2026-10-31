@@ -7,8 +7,32 @@ import { cx } from "@/lib/api";
 import { compactNumber, fetchJson, formatPerMillion, getFilteredDefaultModels, DEFAULT_PROVIDERS, type ModelSummary, type ProviderSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "Models",
-  description: "Browse every AI model available through ProRouter — pricing, context window and capabilities.",
+  title: "AI Model Directory — 35+ LLMs & Frontier APIs | ProRouter",
+  description:
+    "Explore 35+ frontier and open-weight AI models including DeepSeek V4.1, Claude 3.5 Sonnet, Moonshot Kimi K2.7 Code, and OpenAI. Compare real-time token pricing, context windows, and latency.",
+  keywords: [
+    "AI models",
+    "LLM directory",
+    "AI API catalog",
+    "DeepSeek API",
+    "Claude Sonnet API",
+    "Kimi K2.7 Code",
+    "Qwen 3.8",
+    "AI API pricing",
+    "ProRouter models",
+    "best LLM router",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/models",
+  },
+  openGraph: {
+    title: "AI Model Directory — 35+ LLMs & Frontier APIs | ProRouter",
+    description:
+      "Explore 35+ frontier and open-weight AI models with unified API keys and transparent per-token pricing.",
+    url: "https://www.prorouter.in/models",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;

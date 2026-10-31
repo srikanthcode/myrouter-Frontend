@@ -6,8 +6,29 @@ import { Badge, EmptyState } from "@/components/ui";
 import { fetchJson, DEFAULT_PROVIDERS, type ProviderSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "Providers",
-  description: "The upstream AI providers ProRouter routes across, with health, region and retention policy.",
+  title: "Supported AI Providers — OpenAI, Anthropic, DeepSeek, Moonshot & More | ProRouter",
+  description:
+    "ProRouter routes across top AI providers including DeepSeek, Anthropic, OpenAI, Moonshot, Mistral, and Google with real-time health checks, multi-region routing, and automatic fallback.",
+  keywords: [
+    "AI providers",
+    "DeepSeek provider",
+    "OpenAI upstream",
+    "Anthropic API provider",
+    "Moonshot AI",
+    "Mistral AI",
+    "AI router providers",
+    "automatic LLM fallback",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/providers",
+  },
+  openGraph: {
+    title: "Supported AI Providers — OpenAI, Anthropic, DeepSeek & More | ProRouter",
+    description: "One integration, every upstream AI provider with automatic fallback and unified billing.",
+    url: "https://www.prorouter.in/providers",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 const statusTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {

@@ -6,8 +6,29 @@ import { Badge, EmptyState } from "@/components/ui";
 import { fetchJson, DEFAULT_PLANS, type PlanSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "Pricing",
-  description: "ProRouter plans and credit packages. Free models cost nothing; paid models are billed per million tokens from your wallet.",
+  title: "ProRouter Pricing — Transparent Token Pricing, Free Tier & Pay-As-You-Go",
+  description:
+    "Pay-as-you-go AI model inference. Free tier available. Paid models billed per million tokens in INR straight from your wallet with zero markup, no subscription minimums, and instant top-ups.",
+  keywords: [
+    "AI API pricing",
+    "cheap LLM API",
+    "DeepSeek pricing",
+    "Claude pricing",
+    "AI token cost",
+    "pay as you go AI",
+    "ProRouter pricing",
+    "India AI API pricing",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/pricing",
+  },
+  openGraph: {
+    title: "ProRouter Pricing — Transparent Token Pricing & Free Tier",
+    description: "Pay for what you use. Free models cost nothing; paid models billed per million tokens in INR.",
+    url: "https://www.prorouter.in/pricing",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 interface PackageSummary {

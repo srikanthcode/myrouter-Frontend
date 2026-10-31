@@ -7,8 +7,28 @@ import { cx } from "@/lib/api";
 import { compactNumber, fetchJson, formatPerMillion, getFilteredDefaultModels, type ModelSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "Rankings",
-  description: "Model leaderboard by rating, popularity and context window across every provider on ProRouter.",
+  title: "AI Model Leaderboard & Rankings — Top LLMs by Speed, Rating & Cost | ProRouter",
+  description:
+    "Live LLM rankings across DeepSeek, Claude, GPT, and Kimi. Compare models by rating, throughput, pricing per million tokens, and popularity.",
+  keywords: [
+    "AI leaderboard",
+    "LLM rankings",
+    "best AI models",
+    "cheapest AI API",
+    "DeepSeek ranking",
+    "Claude vs GPT",
+    "ProRouter rankings",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/rankings",
+  },
+  openGraph: {
+    title: "AI Model Leaderboard & Rankings | ProRouter",
+    description: "Live LLM rankings by rating, popularity, context window, and price across 35+ frontier models.",
+    url: "https://www.prorouter.in/rankings",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;

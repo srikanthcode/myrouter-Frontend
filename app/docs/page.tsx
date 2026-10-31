@@ -6,8 +6,28 @@ import { CopyButton } from "@/components/ui";
 import { cx } from "@/lib/api";
 
 export const metadata: Metadata = {
-  title: "Docs",
-  description: "ProRouter API reference — one OpenAI-compatible endpoint for every model.",
+  title: "ProRouter API Documentation — OpenAI-Compatible API Quickstart & Reference",
+  description:
+    "Developer documentation for ProRouter API. One drop-in OpenAI-compatible endpoint for 35+ LLMs. Chat completions, streaming SSE, tool calling, JSON mode, and unified API keys.",
+  keywords: [
+    "ProRouter docs",
+    "OpenAI compatible API docs",
+    "AI router API reference",
+    "LLM streaming API",
+    "chat completions API",
+    "DeepSeek API documentation",
+    "Claude API integration",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/docs",
+  },
+  openGraph: {
+    title: "ProRouter API Documentation — OpenAI-Compatible API Quickstart",
+    description: "One OpenAI-compatible endpoint. Point your existing SDK at ProRouter and access 35+ frontier models.",
+    url: "https://www.prorouter.in/docs",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 const nav = [

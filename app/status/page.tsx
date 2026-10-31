@@ -6,8 +6,26 @@ import { Badge, EmptyState } from "@/components/ui";
 import { fetchJson, type StatusResponse } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "Status",
-  description: "Live health of the ProRouter API, dashboard, billing and upstream AI providers.",
+  title: "ProRouter System Status & Uptime — Real-Time API Health",
+  description:
+    "Live health, latency, and uptime status of the ProRouter unified API, dashboard, billing, and upstream AI model providers.",
+  keywords: [
+    "ProRouter status",
+    "AI API status",
+    "DeepSeek API uptime",
+    "OpenAI status",
+    "LLM router health",
+  ],
+  alternates: {
+    canonical: "https://www.prorouter.in/status",
+  },
+  openGraph: {
+    title: "ProRouter System Status & Uptime",
+    description: "Live view of platform services, upstream provider health and the free-model queue.",
+    url: "https://www.prorouter.in/status",
+    siteName: "ProRouter",
+    type: "website",
+  },
 };
 
 const label: Record<string, string> = {

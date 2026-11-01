@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, History, Package, Receipt, Wallet } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, CreditCard, History, Package, Receipt, ShieldCheck, Wallet } from "lucide-react";
 import { ApiError, api, cx, formatINR, timeAgo } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, Modal, Skeleton, useToast } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
@@ -21,7 +21,7 @@ interface WalletData {
   }>;
 }
 
-interface Package {
+interface PackageItem {
   id: string;
   slug: string;
   name: string;
@@ -52,25 +52,45 @@ const txTone: Record<string, "good" | "bad" | "neutral" | "accent"> = {
   adjustment: "neutral",
 };
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function WalletPage() {
   const toast = useToast();
-  const { refresh } = useSession();
+  const { me, refresh } = useSession();
   const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [packages, setPackages] = useState<Package[]>([]);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [buying, setBuying] = useState<Package | null>(null);
+  const [buying, setBuying] = useState<PackageItem | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const [w, p, pay] = await Promise.all([
         api<WalletData>("/wallet"),
-        api<{ items: Package[] }>("/wallet/packages"),
+        api<{ items: PackageItem[] }>("/wallet/packages"),
         api<{ items: Payment[] }>("/payments"),
       ]);
       setWallet(w);
-      setPackages(Array.isArray(p?.items) ? p.items : Array.isArray(p) ? (p as unknown as Package[]) : []);
+      setPackages(Array.isArray(p?.items) ? p.items : Array.isArray(p) ? (p as unknown as PackageItem[]) : []);
       setPayments(Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : []);
       setError(null);
     } catch (e) {
@@ -81,22 +101,99 @@ export default function WalletPage() {
   useEffect(() => {
     void refresh();
     void load();
-  }, [load]);
+  }, [load, refresh]);
 
-  async function checkout(pkg: Package) {
+  async function checkout(pkg: PackageItem) {
     setBusy(true);
     try {
-      const res = await api<{ paymentId: string; invoice: string; gatewayOrderId?: string; keyId?: string }>("/wallet/checkout", {
+      const loaded = await loadRazorpayScript();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!loaded || !(window as any).Razorpay) {
+        toast.push("Could not load Razorpay payment gateway. Please check your connection.", "error");
+        setBusy(false);
+        return;
+      }
+
+      const res = await api<{
+        paymentId: string;
+        invoice: string;
+        amountPaise: number;
+        currency: string;
+        gatewayOrderId?: string;
+        keyId?: string;
+      }>("/wallet/checkout", {
         method: "POST",
         body: { packageSlug: pkg.slug, idempotencyKey: `web-${pkg.slug}-${Date.now()}` },
       });
-      toast.push(`Checkout created for ${pkg.priceFormatted} (invoice ${res.invoice}). Wallet is credited once the gateway webhook confirms payment.`, "success");
-      setBuying(null);
-      await load();
-      await refresh();
+
+      if (!res.gatewayOrderId) {
+        throw new Error("Could not initialize payment order. Please try again.");
+      }
+
+      const razorpayKey = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_live_TDesBovNH5VpIY";
+
+      const options = {
+        key: razorpayKey,
+        amount: res.amountPaise,
+        currency: res.currency || "INR",
+        name: "ProRouter",
+        description: `${pkg.name} — ${pkg.totalFormatted || pkg.priceFormatted} Credits`,
+        image: "https://www.prorouter.in/icon.svg",
+        order_id: res.gatewayOrderId,
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            setBusy(true);
+            await api("/wallet/verify", {
+              method: "POST",
+              body: {
+                paymentId: res.paymentId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature,
+              },
+            });
+            toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
+            setBuying(null);
+            await load();
+            await refresh();
+          } catch (verifyErr) {
+            toast.push(verifyErr instanceof ApiError ? verifyErr.message : "Payment verification failed. Please contact support.", "error");
+          } finally {
+            setBusy(false);
+          }
+        },
+        prefill: {
+          name: me?.user?.name ?? "",
+          email: me?.user?.email ?? "",
+        },
+        notes: {
+          invoice: res.invoice,
+          package: pkg.slug,
+        },
+        theme: {
+          color: "#10b981",
+        },
+        modal: {
+          ondismiss: () => {
+            setBusy(false);
+          },
+        },
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rzp = new (window as any).Razorpay(options);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rzp.on("payment.failed", (failRes: any) => {
+        toast.push(failRes?.error?.description || "Payment failed. Please try another payment method.", "error");
+        setBusy(false);
+      });
+      rzp.open();
     } catch (e) {
       toast.push(e instanceof ApiError ? e.message : "Could not start checkout.", "error");
-    } finally {
       setBusy(false);
     }
   }
@@ -110,7 +207,7 @@ export default function WalletPage() {
   return (
     <div className="fade-up space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Wallet</h1>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Wallet & Billing</h1>
         <p className="mt-1 text-[13.5px] text-mut">Prepaid balance in INR. Paid-model inference is deducted per request; free models cost nothing.</p>
       </div>
 
@@ -120,7 +217,7 @@ export default function WalletPage() {
             <div className="text-[11.5px] uppercase tracking-wide text-mut2">Available balance</div>
             <Wallet className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
           </div>
-          <div className="mt-2 font-mono text-3xl font-semibold tabular-nums">{wallet.balanceFormatted}</div>
+          <div className="mt-2 font-mono text-3xl font-semibold tabular-nums text-good">{wallet.balanceFormatted}</div>
           <div className="mt-1 text-[12.5px] text-mut2">{wallet.currency} · prepaid, never expires</div>
         </Card>
         <Card className="p-5">
@@ -141,8 +238,17 @@ export default function WalletPage() {
 
       {/* Top up */}
       <section>
-        <h2 className="text-sm font-semibold">Add credits</h2>
-        <p className="mt-1 text-[12.5px] text-mut">Some packages include bonus credit on top of what you pay.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Add credits</h2>
+            <p className="mt-0.5 text-[12.5px] text-mut">Pay securely with UPI, Credit/Debit Cards, or NetBanking via Razorpay.</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-line bg-panel2/60 px-3 py-1 font-mono text-[10.5px] text-mut">
+            <ShieldCheck className="size-3 text-good" />
+            <span>Instant Activation</span>
+          </div>
+        </div>
+
         {packages.length === 0 ? (
           <div className="mt-3">
             <EmptyState icon={<Package className="size-6" strokeWidth={1.75} />} title="No credit packages are configured on this deployment." />
@@ -157,12 +263,21 @@ export default function WalletPage() {
                   buying?.slug === p.slug ? "border-accent/60" : "hover:border-line2",
                 )}
               >
-                <h3 className="text-[15px] font-semibold">{p.name}</h3>
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-[15px] font-semibold">{p.name}</h3>
+                  {p.bonusPaise > 0 && <Badge tone="accent">Bonus</Badge>}
+                </div>
                 <div className="mt-2 font-mono text-xl font-semibold tabular-nums">{p.priceFormatted}</div>
                 <div className="mt-1 flex-1 text-[12.5px]">
-                  {p.bonusPaise > 0 ? <span className="text-good">+{formatINR(p.bonusPaise)} bonus · {p.totalFormatted} total</span> : <span className="text-mut2">No bonus credit</span>}
+                  {p.bonusPaise > 0 ? (
+                    <span className="text-good font-medium">+{formatINR(p.bonusPaise)} bonus · {p.totalFormatted} total</span>
+                  ) : (
+                    <span className="text-mut2">No bonus credit</span>
+                  )}
                 </div>
-                <Button className="mt-4" size="sm" onClick={() => setBuying(p)}>Buy {p.priceFormatted}</Button>
+                <Button className="mt-4" size="sm" onClick={() => setBuying(p)}>
+                  Buy {p.priceFormatted}
+                </Button>
               </Card>
             ))}
           </div>
@@ -212,8 +327,8 @@ export default function WalletPage() {
       {/* Payments */}
       <Card>
         <div className="border-b border-line px-5 py-3.5">
-          <h2 className="text-sm font-semibold">Payments</h2>
-          <p className="mt-0.5 text-[12.5px] text-mut">Credit is applied only after the gateway webhook is signature-verified.</p>
+          <h2 className="text-sm font-semibold">Payment History</h2>
+          <p className="mt-0.5 text-[12.5px] text-mut">Verified gateway charges with corresponding GST invoice numbers.</p>
         </div>
         {payments.length === 0 ? (
           <div className="p-5">
@@ -247,23 +362,52 @@ export default function WalletPage() {
         )}
       </Card>
 
-      <Modal open={!!buying} onClose={() => setBuying(null)} title="Confirm top-up">
+      <Modal open={!!buying} onClose={() => !busy && setBuying(null)} title="Confirm Top-Up">
         {buying && (
-          <>
-            <p className="text-[13px] text-mut">
-              You are buying <span className="font-medium text-fg">{buying.name}</span> for{" "}
-              <span className="font-mono tabular-nums text-fg">{buying.priceFormatted}</span>
-              {buying.bonusPaise > 0 && <> and will receive <span className="font-mono tabular-nums text-good">{buying.totalFormatted}</span> in credits</>}.
-            </p>
-            <p className="mt-3 text-[12.5px] text-mut2">
-              Your wallet is credited only after the payment gateway confirms the charge via a verified webhook. If the gateway is not configured on this
-              deployment, the checkout will return a clear error and no money will move.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setBuying(null)}>Cancel</Button>
-              <Button loading={busy} onClick={() => void checkout(buying)}>Continue to payment</Button>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-line bg-ink2/60 p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-[14px] font-semibold text-fg">{buying.name}</h4>
+                  <p className="mt-0.5 text-[12px] text-mut">ProRouter API Balance</p>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-lg font-bold text-fg">{buying.priceFormatted}</div>
+                  {buying.bonusPaise > 0 && (
+                    <div className="font-mono text-[11px] text-good">+{formatINR(buying.bonusPaise)} Bonus</div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2.5 text-[12px]">
+                <span className="text-mut">Total Credits Received:</span>
+                <span className="font-mono font-semibold text-good">{buying.totalFormatted}</span>
+              </div>
             </div>
-          </>
+
+            {/* Payment Method Badges */}
+            <div className="rounded-lg border border-line bg-panel2/40 p-3.5 text-[11.5px] space-y-2">
+              <div className="flex items-center gap-2 font-medium text-fg">
+                <ShieldCheck className="size-4 text-good" />
+                <span>Secured by Razorpay</span>
+              </div>
+              <p className="text-mut text-[11.5px] leading-relaxed">
+                Supports all payment methods: UPI (Google Pay, PhonePe, Paytm, BHIM), Credit/Debit Cards (Visa, Mastercard, RuPay), NetBanking, and Wallets.
+              </p>
+              <div className="flex items-center gap-2 pt-1 text-[11px] text-mut2">
+                <CreditCard className="size-3.5" />
+                <span>Instant 256-bit encrypted checkout</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" disabled={busy} onClick={() => setBuying(null)}>
+                Cancel
+              </Button>
+              <Button loading={busy} onClick={() => void checkout(buying)}>
+                Pay {buying.priceFormatted}
+              </Button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

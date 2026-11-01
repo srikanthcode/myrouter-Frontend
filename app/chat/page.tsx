@@ -14,7 +14,7 @@ import {
   ChevronDown,
   Info,
 } from "lucide-react";
-import { PublicShell } from "@/components/PublicShell";
+import { PublicNav } from "@/components/PublicNav";
 import { Badge, Button, useToast } from "@/components/ui";
 import { cx, formatINR } from "@/lib/api";
 
@@ -712,8 +712,9 @@ export default function ChatPage() {
   }, [apiKey, model]);
 
   return (
-    <PublicShell>
-      <div className="mx-auto max-w-6xl px-3 py-2 sm:px-4 sm:py-2.5">
+    <div className="flex h-screen max-h-screen flex-col overflow-hidden bg-bg">
+      <PublicNav />
+      <div className="mx-auto flex w-full max-w-7xl flex-1 min-h-0 flex-col px-3 py-2 sm:px-4 overflow-hidden">
         {/* Sleek, Professional Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line pb-2">
           <div className="flex items-center gap-2.5">
@@ -792,9 +793,9 @@ export default function ChatPage() {
         </div>
 
         {/* Main Content Layout */}
-        <div className="mt-2.5 grid gap-3 lg:grid-cols-[1fr_270px]">
+        <div className="mt-2 grid flex-1 min-h-0 gap-3 lg:grid-cols-[1fr_270px] overflow-hidden">
           {/* Left: Chat Container */}
-          <div className="flex h-[calc(100dvh-130px)] min-h-[380px] max-h-[570px] flex-col rounded-xl border border-line bg-panel overflow-hidden shadow-sm">
+          <div className="flex h-full min-h-0 flex-col rounded-xl border border-line bg-panel overflow-hidden shadow-sm">
             {/* Conversation Feed */}
             <div
               ref={scrollRef}
@@ -967,7 +968,7 @@ export default function ChatPage() {
           </div>
 
           {/* Right: Sidebar / Telemetry / Settings */}
-          <aside className="flex h-[calc(100dvh-130px)] min-h-[380px] max-h-[570px] flex-col rounded-xl border border-line bg-panel overflow-hidden shadow-sm">
+          <aside className="hidden lg:flex h-full min-h-0 flex-col rounded-xl border border-line bg-panel overflow-hidden shadow-sm">
             {/* Tab navigation */}
             <div className="shrink-0 flex border-b border-line bg-panel2/50 p-1">
               <button
@@ -1194,6 +1195,6 @@ export default function ChatPage() {
           </aside>
         </div>
       </div>
-    </PublicShell>
+    </div>
   );
 }

@@ -4,8 +4,78 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60; // Support full streaming inference duration on Vercel
 
-// ── Upstream 1: TokenJuice DeepSeek V4.1 (Primary Engine for Coding & Frontier Models) ──
-const TOKENJUICE_KEY = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts";
+// ── Upstream 1: TokenJuice DeepSeek V4.1 Multi-Key Pool (11 Accounts Load-Balanced) ──
+export const TOKENJUICE_KEYS: string[] = [
+  "tj_llvqgvMUMVg5SKOynVBtBqDJp2J566mapFE9KNPAVqE",
+  "tj_mbQStnVQZo7aV70jSdb5T3L1rSs4vmtKvVuPdYMsxCs",
+  "tj_XvoBmNCcszDFBbOtvS-D62oDXEEO7OEIqd9rzhfxZX8",
+  "tj_82Vn1a2E8vEx4GYI9-SFYpPzfdHRxueNdgo-tLwaLzU",
+  "tj_AuPOZPmvg2huDYZCB7DtY4wvWdPj8_LfWh0ktfaCaIQ",
+  "tj_eqMEPp8AaPurBNL2uH1woNwxMYpVNtZ1_ohcFmxMGGg",
+  "tj_NmZmLWnTyUM7UhdFCQ7ZFwros2U5lJWSWbyHpR03Q-8",
+  "tj_YFTNGYInY6JLHh51uQXE2wOgNfSZOdCTRKCQG0_5YYc",
+  "tj_2wYDoVGvY6TWI9u2zMZpbY80ijRR9hB9SYJVIppXCOg",
+  "tj_gM_Y7cHTk7dld2naygnUcBpFWnFo1d_cmWc0YUbXox4",
+  "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts",
+];
+
+const cooldownMap = new Map<string, number>();
+let keyCursor = Math.floor(Math.random() * TOKENJUICE_KEYS.length);
+
+export function getNextTokenJuiceKey(): string {
+  const now = Date.now();
+  const available = TOKENJUICE_KEYS.filter((k) => (cooldownMap.get(k) || 0) <= now);
+  if (available.length > 0) {
+    keyCursor = (keyCursor + 1) % available.length;
+    return available[keyCursor];
+  }
+  return [...TOKENJUICE_KEYS].sort((a, b) => (cooldownMap.get(a) || 0) - (cooldownMap.get(b) || 0))[0];
+}
+
+export function markTokenJuiceCooldown(key: string, durationMs = 30_000) {
+  cooldownMap.set(key, Date.now() + durationMs);
+}
+
+export async function fetchTokenJuiceWithRetry(
+  url: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+  maxAttempts = 3
+): Promise<{ res: Response; usedKey: string }> {
+  let lastRes: Response | null = null;
+  let lastErr: Error | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const key = getNextTokenJuiceKey();
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        markTokenJuiceCooldown(key, res.status === 429 ? 60_000 : 15_000);
+        lastRes = res;
+        continue;
+      }
+
+      return { res, usedKey: key };
+    } catch (err: unknown) {
+      markTokenJuiceCooldown(key, 10_000);
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (signal?.aborted) throw lastErr;
+    }
+  }
+
+  if (lastRes) return { res: lastRes, usedKey: "" };
+  throw lastErr || new Error("All TokenJuice upstream keys exhausted");
+}
+
 const TOKENJUICE_BASE = process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "https://api.tokenjuice.ai/v1";
 const TOKENJUICE_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017";
 
@@ -555,14 +625,7 @@ async function streamTokenJuice(
   }, 2000);
 
   try {
-    const upstreamRes = await fetch(upstreamUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${TOKENJUICE_KEY}`,
-      },
-      body: JSON.stringify(upstreamBody),
-    });
+    const { res: upstreamRes } = await fetchTokenJuiceWithRetry(upstreamUrl, upstreamBody);
 
     clearInterval(pingInterval);
 
@@ -775,15 +838,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     };
 
     try {
-      const upstreamRes = await fetch(upstreamUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${TOKENJUICE_KEY}`,
-        },
-        body: JSON.stringify(upstreamBody),
-        signal: abortCtrl.signal,
-      });
+      const { res: upstreamRes } = await fetchTokenJuiceWithRetry(upstreamUrl, upstreamBody, abortCtrl.signal);
       clearTimeout(timeoutId);
 
       if (upstreamRes.ok) {

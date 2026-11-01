@@ -301,6 +301,59 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/wallet/packages") {
+    const url = new URL(req.url);
+    const curr = (url.searchParams.get("currency") || "INR").toUpperCase();
+    if (curr === "USD") {
+      return NextResponse.json({
+        items: [
+          {
+            id: "pkg_usd_5",
+            slug: "starter-usd-5",
+            name: "$5 Starter Pack",
+            pricePaise: 500,
+            priceFormatted: "$5.00",
+            bonusPaise: 0,
+            totalPaise: 500,
+            totalFormatted: "$5.00",
+            currency: "USD",
+          },
+          {
+            id: "pkg_usd_10",
+            slug: "pro-usd-10",
+            name: "$10 Pro Pack",
+            pricePaise: 1000,
+            priceFormatted: "$10.00",
+            bonusPaise: 150,
+            totalPaise: 1150,
+            totalFormatted: "$11.50",
+            currency: "USD",
+          },
+          {
+            id: "pkg_usd_25",
+            slug: "scale-usd-25",
+            name: "$25 Scale Pack",
+            pricePaise: 2500,
+            priceFormatted: "$25.00",
+            bonusPaise: 500,
+            totalPaise: 3000,
+            totalFormatted: "$30.00",
+            currency: "USD",
+          },
+          {
+            id: "pkg_usd_50",
+            slug: "power-usd-50",
+            name: "$50 Power Pack",
+            pricePaise: 5000,
+            priceFormatted: "$50.00",
+            bonusPaise: 1500,
+            totalPaise: 6500,
+            totalFormatted: "$65.00",
+            currency: "USD",
+          },
+        ],
+      });
+    }
+
     return NextResponse.json({
       items: [
         {
@@ -336,6 +389,17 @@ export async function handleFallback(req: NextRequest, path: string[]) {
           totalFormatted: "₹1,200",
           currency: "INR",
         },
+        {
+          id: "pkg_2500",
+          slug: "power-2500",
+          name: "₹2,500 Power Pack",
+          pricePaise: 250000,
+          priceFormatted: "₹2,500",
+          bonusPaise: 65000,
+          totalPaise: 315000,
+          totalFormatted: "₹3,150",
+          currency: "INR",
+        },
       ],
     });
   }
@@ -348,16 +412,42 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       body = (await req.json()) || {};
     } catch {}
 
-    const packageMap: Record<string, { pricePaise: number; name: string; bonusPaise: number }> = {
-      "starter-100": { pricePaise: 10000, name: "₹100 Starter Pack", bonusPaise: 0 },
-      "pro-500": { pricePaise: 50000, name: "₹500 Pro Pack", bonusPaise: 5000 },
-      "scale-1000": { pricePaise: 100000, name: "₹1,000 Scale Pack", bonusPaise: 20000 },
-      "starter": { pricePaise: 49900, name: "Starter", bonusPaise: 0 },
-      "builder": { pricePaise: 99900, name: "Builder", bonusPaise: 5100 },
-      "pro": { pricePaise: 249900, name: "Pro", bonusPaise: 25100 },
-      "power": { pricePaise: 499900, name: "Power", bonusPaise: 75100 },
+    interface GatewayPackage {
+      priceMinor: number;
+      name: string;
+      bonusPaise: number;
+      currency: "INR" | "USD";
+    }
+
+    const packageMap: Record<string, GatewayPackage> = {
+      // INR Packages
+      "starter-100": { priceMinor: 10000, name: "₹100 Starter Pack", bonusPaise: 0, currency: "INR" },
+      "pro-500": { priceMinor: 50000, name: "₹500 Pro Pack", bonusPaise: 5000, currency: "INR" },
+      "scale-1000": { priceMinor: 100000, name: "₹1,000 Scale Pack", bonusPaise: 20000, currency: "INR" },
+      "power-2500": { priceMinor: 250000, name: "₹2,500 Power Pack", bonusPaise: 65000, currency: "INR" },
+      "starter": { priceMinor: 49900, name: "Starter", bonusPaise: 0, currency: "INR" },
+      "builder": { priceMinor: 99900, name: "Builder", bonusPaise: 5100, currency: "INR" },
+      "pro": { priceMinor: 249900, name: "Pro", bonusPaise: 25100, currency: "INR" },
+      "power": { priceMinor: 499900, name: "Power", bonusPaise: 75100, currency: "INR" },
+
+      // USD Packages
+      "starter-usd-5": { priceMinor: 500, name: "$5 Starter Pack", bonusPaise: 0, currency: "USD" },
+      "pro-usd-10": { priceMinor: 1000, name: "$10 Pro Pack", bonusPaise: 150, currency: "USD" },
+      "scale-usd-25": { priceMinor: 2500, name: "$25 Scale Pack", bonusPaise: 500, currency: "USD" },
+      "power-usd-50": { priceMinor: 5000, name: "$50 Power Pack", bonusPaise: 1500, currency: "USD" },
+      "builder-usd": { priceMinor: 1200, name: "Builder Plan", bonusPaise: 100, currency: "USD" },
+      "pro-usd": { priceMinor: 2900, name: "Pro Plan", bonusPaise: 300, currency: "USD" },
     };
-    const pkg = packageMap[body.packageSlug] || { pricePaise: 10000, name: "Credits", bonusPaise: 0 };
+
+    const isUSD = (typeof body.currency === "string" && body.currency.toUpperCase() === "USD") || (typeof body.packageSlug === "string" && body.packageSlug.includes("usd"));
+    const defaultCurrency: "INR" | "USD" = isUSD ? "USD" : "INR";
+    const defaultMinor = isUSD ? 500 : 10000;
+    const pkg: GatewayPackage = packageMap[body.packageSlug] || {
+      priceMinor: defaultMinor,
+      name: isUSD ? "$5.00 Credits" : "₹100 Credits",
+      bonusPaise: 0,
+      currency: defaultCurrency,
+    };
     const invoice = "PRO-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
     const paymentId = "pay_" + Math.random().toString(36).slice(2, 14);
 
@@ -371,10 +461,10 @@ export async function handleFallback(req: NextRequest, path: string[]) {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          amount: pkg.pricePaise,
-          currency: "INR",
+          amount: pkg.priceMinor,
+          currency: pkg.currency,
           receipt: invoice,
-          notes: { payment_id: paymentId, package: body.packageSlug },
+          notes: { payment_id: paymentId, package: body.packageSlug, currency: pkg.currency },
         }),
       });
       if (rzpRes.ok) {
@@ -392,8 +482,8 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     return NextResponse.json({
       paymentId,
       invoice,
-      amountPaise: pkg.pricePaise,
-      currency: "INR",
+      amountPaise: pkg.priceMinor,
+      currency: pkg.currency,
       gateway: "razorpay",
       gatewayOrderId,
       keyId,
@@ -504,6 +594,75 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       providers: DEFAULT_PROVIDERS,
       total: DEFAULT_PROVIDERS.length,
     });
+  }
+
+    // ── Keys Management Fallback ──
+  if (subpath === "/keys" && method === "GET") {
+    return NextResponse.json({
+      items: [
+        {
+          id: "key_live_default_user",
+          name: "Default Live Key",
+          prefix: "pro_sk_live_play",
+          createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+          expiresAt: null,
+          revokedAt: null,
+          lastUsedAt: new Date().toISOString(),
+          requestCount: 42,
+          spendPaise: 0,
+          spendingLimitPaise: null,
+          allowedModels: null,
+        },
+      ],
+    });
+  }
+
+  if (subpath === "/keys" && method === "POST") {
+    let body: Record<string, any> = {};
+    try { body = await req.json(); } catch {}
+    const keyName = body.name || "Production Key";
+    const randPart = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
+    const secret = "pro_sk_live_" + randPart;
+    const prefix = secret.slice(0, 16);
+    const key = {
+      id: "key_" + Math.random().toString(36).slice(2, 10),
+      name: keyName,
+      prefix,
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+      requestCount: 0,
+      spendPaise: 0,
+      spendingLimitPaise: body.spendingLimitPaise || null,
+      allowedModels: body.allowedModels || null,
+    };
+    return NextResponse.json({ key, secret }, { status: 201 });
+  }
+
+  if (subpath.startsWith("/keys/") && subpath.endsWith("/rotate") && method === "POST") {
+    const keyId = subpath.slice("/keys/".length, -"/rotate".length);
+    const randPart = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
+    const secret = "pro_sk_live_" + randPart;
+    const prefix = secret.slice(0, 16);
+    const key = {
+      id: keyId,
+      name: "Rotated Key",
+      prefix,
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: new Date().toISOString(),
+      requestCount: 0,
+      spendPaise: 0,
+      spendingLimitPaise: null,
+      allowedModels: null,
+    };
+    return NextResponse.json({ key, secret });
+  }
+
+  if (subpath.startsWith("/keys/") && method === "DELETE") {
+    return NextResponse.json({ ok: true });
   }
 
   return NextResponse.json({ error: { code: "not_found", message: `Route ${method} ${subpath} not found.` } }, { status: 404 });

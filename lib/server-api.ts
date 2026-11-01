@@ -115,7 +115,7 @@ export interface PackageSummary {
   currency: string;
 }
 
-export const DEFAULT_PACKAGES: PackageSummary[] = [
+export const DEFAULT_PACKAGES_INR: PackageSummary[] = [
   {
     id: "pkg-starter-100",
     slug: "starter-100",
@@ -159,6 +159,127 @@ export const DEFAULT_PACKAGES: PackageSummary[] = [
     totalPaise: 315000,
     totalFormatted: "₹3,150",
     currency: "INR",
+  },
+];
+
+export const DEFAULT_PACKAGES_USD: PackageSummary[] = [
+  {
+    id: "pkg-starter-usd-5",
+    slug: "starter-usd-5",
+    name: "Starter Pack",
+    pricePaise: 500,
+    priceFormatted: "$5.00",
+    bonusPaise: 0,
+    totalPaise: 500,
+    totalFormatted: "$5.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-pro-usd-10",
+    slug: "pro-usd-10",
+    name: "Pro Pack",
+    pricePaise: 1000,
+    priceFormatted: "$10.00",
+    bonusPaise: 150,
+    totalPaise: 1150,
+    totalFormatted: "$11.50",
+    currency: "USD",
+  },
+  {
+    id: "pkg-scale-usd-25",
+    slug: "scale-usd-25",
+    name: "Scale Pack",
+    pricePaise: 2500,
+    priceFormatted: "$25.00",
+    bonusPaise: 500,
+    totalPaise: 3000,
+    totalFormatted: "$30.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-power-usd-50",
+    slug: "power-usd-50",
+    name: "Power Pack",
+    pricePaise: 5000,
+    priceFormatted: "$50.00",
+    bonusPaise: 1500,
+    totalPaise: 6500,
+    totalFormatted: "$65.00",
+    currency: "USD",
+  },
+];
+
+export const DEFAULT_PACKAGES = DEFAULT_PACKAGES_INR;
+
+export const DEFAULT_PLANS_USD: PlanSummary[] = [
+  {
+    id: "plan-free",
+    slug: "free",
+    name: "Free",
+    tagline: "Explore frontier AI models with zero upfront commitment.",
+    pricePaise: 0,
+    priceFormatted: "$0",
+    currency: "USD",
+    period: "forever",
+    freeRpm: 10,
+    freeRph: 100,
+    freeRpd: 1000,
+    concurrency: 2,
+    queuePriority: 10,
+    features: [
+      "Access to all 35+ frontier models",
+      "Free daily quota on all models",
+      "Standard queue priority",
+      "Streaming SSE responses",
+      "OpenAI SDK compatible endpoint",
+    ],
+    sortOrder: 10,
+  },
+  {
+    id: "plan-builder-usd",
+    slug: "builder-usd",
+    name: "Builder",
+    tagline: "For developers and early-stage products building with AI.",
+    pricePaise: 1200,
+    priceFormatted: "$12",
+    currency: "USD",
+    period: "monthly",
+    freeRpm: 30,
+    freeRph: 500,
+    freeRpd: 5000,
+    concurrency: 5,
+    queuePriority: 20,
+    features: [
+      "Higher rate limits (30 req/min)",
+      "High-priority queue routing",
+      "Pay-as-you-go balance rollover",
+      "Multiple API keys",
+      "Detailed latency & usage breakdown",
+    ],
+    sortOrder: 20,
+  },
+  {
+    id: "plan-pro-usd",
+    slug: "pro-usd",
+    name: "Pro",
+    tagline: "Maximum throughput, dedicated priority queue, and high concurrency.",
+    pricePaise: 2900,
+    priceFormatted: "$29",
+    currency: "USD",
+    period: "monthly",
+    freeRpm: 60,
+    freeRph: 1500,
+    freeRpd: 15000,
+    concurrency: 15,
+    queuePriority: 30,
+    features: [
+      "Ultra-high rate limits (60 req/min)",
+      "VIP priority queue routing",
+      "Unlimited API keys",
+      "Reasoning & thought token support",
+      "Priority customer support",
+    ],
+    sortOrder: 30,
   },
 ];
 

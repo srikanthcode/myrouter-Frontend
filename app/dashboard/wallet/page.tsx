@@ -141,6 +141,75 @@ const DEFAULT_WALLET_PACKAGES: PackageItem[] = [
   },
 ];
 
+const DEFAULT_WALLET_PACKAGES_USD: PackageItem[] = [
+  {
+    id: "pkg-starter-usd-5",
+    slug: "starter-usd-5",
+    name: "Starter Pack",
+    pricePaise: 500,
+    priceFormatted: "$5.00",
+    bonusPaise: 0,
+    totalPaise: 500,
+    totalFormatted: "$5.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-pro-usd-10",
+    slug: "pro-usd-10",
+    name: "Pro Pack",
+    pricePaise: 1000,
+    priceFormatted: "$10.00",
+    bonusPaise: 150,
+    totalPaise: 1150,
+    totalFormatted: "$11.50",
+    currency: "USD",
+  },
+  {
+    id: "pkg-scale-usd-25",
+    slug: "scale-usd-25",
+    name: "Scale Pack",
+    pricePaise: 2500,
+    priceFormatted: "$25.00",
+    bonusPaise: 500,
+    totalPaise: 3000,
+    totalFormatted: "$30.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-power-usd-50",
+    slug: "power-usd-50",
+    name: "Power Pack",
+    pricePaise: 5000,
+    priceFormatted: "$50.00",
+    bonusPaise: 1500,
+    totalPaise: 6500,
+    totalFormatted: "$65.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-builder-usd",
+    slug: "builder-usd",
+    name: "Builder Plan",
+    pricePaise: 1200,
+    priceFormatted: "$12.00",
+    bonusPaise: 100,
+    totalPaise: 1300,
+    totalFormatted: "$13.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-pro-usd",
+    slug: "pro-usd",
+    name: "Pro Plan",
+    pricePaise: 2900,
+    priceFormatted: "$29.00",
+    bonusPaise: 300,
+    totalPaise: 3200,
+    totalFormatted: "$32.00",
+    currency: "USD",
+  },
+];
+
 export default function WalletPage() {
   const toast = useToast();
   const { me, refresh } = useSession();
@@ -150,6 +219,7 @@ export default function WalletPage() {
   const [error, setError] = useState<string | null>(null);
   const [buying, setBuying] = useState<PackageItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [currency, setCurrency] = useState<"INR" | "USD">("INR");
 
   const load = useCallback(async () => {
     try {
@@ -159,14 +229,15 @@ export default function WalletPage() {
         api<{ items: Payment[] }>("/payments"),
       ]);
       setWallet(w);
-      const items = Array.isArray(p?.items) && p.items.length > 0 ? p.items : Array.isArray(p) && (p as unknown as PackageItem[]).length > 0 ? (p as unknown as PackageItem[]) : DEFAULT_WALLET_PACKAGES;
+      const fallbackP = currency === "USD" ? DEFAULT_WALLET_PACKAGES_USD : DEFAULT_WALLET_PACKAGES;
+      const items = Array.isArray(p?.items) && p.items.length > 0 && p.items[0]?.currency === currency ? p.items : fallbackP;
       setPackages(items);
       setPayments(Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : []);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your wallet.");
     }
-  }, []);
+  }, [currency]);
 
   useEffect(() => {
     void refresh();
@@ -193,7 +264,7 @@ export default function WalletPage() {
         keyId?: string;
       }>("/wallet/checkout", {
         method: "POST",
-        body: { packageSlug: pkg.slug, idempotencyKey: `web-${pkg.slug}-${Date.now()}` },
+        body: { packageSlug: pkg.slug, currency: pkg.currency || currency, idempotencyKey: `web-${pkg.slug}-${Date.now()}` },
       });
 
       if (!res.gatewayOrderId) {
@@ -205,7 +276,7 @@ export default function WalletPage() {
       const options = {
         key: razorpayKey,
         amount: res.amountPaise,
-        currency: res.currency || "INR",
+        currency: res.currency || pkg.currency || currency || "INR",
         name: "ProRouter",
         description: `${pkg.name} — ${pkg.totalFormatted || pkg.priceFormatted} Credits`,
         image: "https://www.prorouter.in/icon.svg",
@@ -308,14 +379,48 @@ export default function WalletPage() {
 
       {/* Top up */}
       <section>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">Add credits</h2>
-            <p className="mt-0.5 text-[12.5px] text-mut">Pay securely with UPI, Credit/Debit Cards, or NetBanking via Razorpay.</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">Add credits ({currency})</h2>
+              <Badge tone="accent">{currency === "USD" ? "International" : "Domestic"}</Badge>
+            </div>
+            <p className="mt-0.5 text-[12.5px] text-mut">
+              {currency === "USD"
+                ? "Pay securely in US Dollars via International Cards (Visa, Mastercard, Amex) & PayPal."
+                : "Pay securely in INR via UPI (GPay, PhonePe, Paytm), RuPay Cards, or NetBanking."}
+            </p>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-line bg-panel2/60 px-3 py-1 font-mono text-[10.5px] text-mut">
-            <ShieldCheck className="size-3 text-good" />
-            <span>Instant Activation</span>
+
+          <div className="flex items-center gap-2">
+            {/* Currency Switcher */}
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-panel2/80 p-0.5">
+              <button
+                type="button"
+                onClick={() => setCurrency("INR")}
+                className={cx(
+                  "cursor-pointer rounded-md px-3 py-1 font-mono text-xs font-semibold transition-colors",
+                  currency === "INR" ? "bg-accent text-accent-ink shadow-xs" : "text-mut hover:text-fg"
+                )}
+              >
+                🇮🇳 INR (₹)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency("USD")}
+                className={cx(
+                  "cursor-pointer rounded-md px-3 py-1 font-mono text-xs font-semibold transition-colors",
+                  currency === "USD" ? "bg-accent text-accent-ink shadow-xs" : "text-mut hover:text-fg"
+                )}
+              >
+                🇺🇸 USD ($)
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-line bg-panel2/60 px-3 py-1 font-mono text-[10.5px] text-mut">
+              <ShieldCheck className="size-3 text-good" />
+              <span>Instant Activation</span>
+            </div>
           </div>
         </div>
 
@@ -458,14 +563,16 @@ export default function WalletPage() {
             <div className="rounded-lg border border-line bg-panel2/40 p-3.5 text-[11.5px] space-y-2">
               <div className="flex items-center gap-2 font-medium text-fg">
                 <ShieldCheck className="size-4 text-good" />
-                <span>Secured by Razorpay</span>
+                <span>Secured by Razorpay ({buying.currency || currency})</span>
               </div>
               <p className="text-mut text-[11.5px] leading-relaxed">
-                Supports all payment methods: UPI (Google Pay, PhonePe, Paytm, BHIM), Credit/Debit Cards (Visa, Mastercard, RuPay), NetBanking, and Wallets.
+                {buying.currency === "USD" || currency === "USD"
+                  ? "Supports Global Credit/Debit Cards (Visa, Mastercard, American Express) & PayPal with instant Razorpay checkout."
+                  : "Supports all Indian payment methods: UPI (Google Pay, PhonePe, Paytm, BHIM), Cards (Visa, Mastercard, RuPay), and NetBanking."}
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-mut2">
                 <CreditCard className="size-3.5" />
-                <span>Instant 256-bit encrypted checkout</span>
+                <span>Instant 256-bit encrypted checkout · No hidden charges</span>
               </div>
             </div>
 

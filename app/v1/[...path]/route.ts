@@ -4,39 +4,41 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60; // Support full streaming inference duration on Vercel
 
-// ── Upstream 1: TokenJuice DeepSeek V4.1 Multi-Key Pool (11 Accounts Load-Balanced) ──
-export const TOKENJUICE_KEYS: string[] = [
-  "tj_llvqgvMUMVg5SKOynVBtBqDJp2J566mapFE9KNPAVqE",
-  "tj_mbQStnVQZo7aV70jSdb5T3L1rSs4vmtKvVuPdYMsxCs",
-  "tj_XvoBmNCcszDFBbOtvS-D62oDXEEO7OEIqd9rzhfxZX8",
-  "tj_82Vn1a2E8vEx4GYI9-SFYpPzfdHRxueNdgo-tLwaLzU",
-  "tj_AuPOZPmvg2huDYZCB7DtY4wvWdPj8_LfWh0ktfaCaIQ",
-  "tj_eqMEPp8AaPurBNL2uH1woNwxMYpVNtZ1_ohcFmxMGGg",
-  "tj_NmZmLWnTyUM7UhdFCQ7ZFwros2U5lJWSWbyHpR03Q-8",
-  "tj_YFTNGYInY6JLHh51uQXE2wOgNfSZOdCTRKCQG0_5YYc",
-  "tj_2wYDoVGvY6TWI9u2zMZpbY80ijRR9hB9SYJVIppXCOg",
-  "tj_gM_Y7cHTk7dld2naygnUcBpFWnFo1d_cmWc0YUbXox4",
-  "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts",
-];
+// ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
+const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+const GATEWAY_BASE = (process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "").replace(/\/+$/, "");
+const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-1017";
+
+// Read API keys dynamically from environment variable (comma, semicolon, or space-separated)
+export function getGatewayKeyPool(): string[] {
+  const envVal = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || process.env.PROROUTER_GATEWAY_KEYS || "";
+  if (!envVal.trim()) return [];
+  return envVal
+    .split(/[\s,;\n]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
 
 const cooldownMap = new Map<string, number>();
-let keyCursor = Math.floor(Math.random() * TOKENJUICE_KEYS.length);
+let keyCursor = 0;
 
-export function getNextTokenJuiceKey(): string {
+export function getNextGatewayKey(): string | null {
+  const keys = getGatewayKeyPool();
+  if (keys.length === 0) return null;
   const now = Date.now();
-  const available = TOKENJUICE_KEYS.filter((k) => (cooldownMap.get(k) || 0) <= now);
+  const available = keys.filter((k) => (cooldownMap.get(k) || 0) <= now);
   if (available.length > 0) {
     keyCursor = (keyCursor + 1) % available.length;
     return available[keyCursor];
   }
-  return [...TOKENJUICE_KEYS].sort((a, b) => (cooldownMap.get(a) || 0) - (cooldownMap.get(b) || 0))[0];
+  return [...keys].sort((a, b) => (cooldownMap.get(a) || 0) - (cooldownMap.get(b) || 0))[0];
 }
 
-export function markTokenJuiceCooldown(key: string, durationMs = 30_000) {
+export function markGatewayCooldown(key: string, durationMs = 30_000) {
   cooldownMap.set(key, Date.now() + durationMs);
 }
 
-export async function fetchTokenJuiceWithRetry(
+export async function fetchGatewayWithRetry(
   url: string,
   body: Record<string, unknown>,
   signal?: AbortSignal,
@@ -46,38 +48,37 @@ export async function fetchTokenJuiceWithRetry(
   let lastErr: Error | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const key = getNextTokenJuiceKey();
+    const key = getNextGatewayKey();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (key) {
+      headers["Authorization"] = `Bearer ${key}`;
+    }
+
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
+        headers,
         body: JSON.stringify(body),
         signal,
       });
 
       if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-        markTokenJuiceCooldown(key, res.status === 429 ? 60_000 : 15_000);
+        if (key) markGatewayCooldown(key, res.status === 429 ? 60_000 : 15_000);
         lastRes = res;
         continue;
       }
 
-      return { res, usedKey: key };
+      return { res, usedKey: key || "" };
     } catch (err: unknown) {
-      markTokenJuiceCooldown(key, 10_000);
+      if (key) markGatewayCooldown(key, 10_000);
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (signal?.aborted) throw lastErr;
     }
   }
 
   if (lastRes) return { res: lastRes, usedKey: "" };
-  throw lastErr || new Error("All TokenJuice upstream keys exhausted");
+  throw lastErr || new Error("All upstream gateway connections exhausted");
 }
-
-const TOKENJUICE_BASE = process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "https://api.tokenjuice.ai/v1";
-const TOKENJUICE_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017";
 
 // ── Upstream 2: FreeModels Pro Worker (For Official Pro Router Tiered Text Models) ──
 const FREEMODELS_URL = "https://freemodels-chat.freemodels.workers.dev";
@@ -178,7 +179,7 @@ export const ALL_MODELS: ModelEntry[] = [
     pricing: { input_usd_per_million: 1.00, output_usd_per_million: 4.00 },
   },
 
-  // ── 2. DeepSeek Frontier Series (Backend TokenJuice DeepSeek V4.1) ──
+  // ── 2. Frontier Intelligence Series ──
   {
     id: "deepseek-v4.1-flash",
     name: "DeepSeek V4.1 Flash",
@@ -594,8 +595,8 @@ export function cleanAsterisks(text: string): string {
   return res;
 }
 
-// ── Stream helper for TokenJuice DeepSeek V4.1 ──
-async function streamTokenJuice(
+// ── Stream helper for Upstream AI Gateway ──
+async function streamGateway(
   controller: ReadableStreamDefaultController,
   encoder: TextEncoder,
   decoder: TextDecoder,
@@ -608,11 +609,11 @@ async function streamTokenJuice(
   modelDisplayName = requestedRawModel,
   ownerName = "prorouter"
 ) {
-  const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
+  const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
   const upstreamBody = {
     ...payload,
     messages: effectiveMessages,
-    model: TOKENJUICE_MODEL,
+    model: GATEWAY_MODEL,
     stream: true,
   };
 
@@ -625,7 +626,7 @@ async function streamTokenJuice(
   }, 2000);
 
   try {
-    const { res: upstreamRes } = await fetchTokenJuiceWithRetry(upstreamUrl, upstreamBody);
+    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody);
 
     clearInterval(pingInterval);
 
@@ -678,7 +679,7 @@ async function streamTokenJuice(
           }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
         } catch {
-          let fallback = line.replaceAll(TOKENJUICE_MODEL, requestedRawModel);
+          let fallback = line.replaceAll(GATEWAY_MODEL, requestedRawModel);
           if (shouldCleanAsterisks) {
             fallback = cleanAsterisks(fallback);
           }
@@ -809,8 +810,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           })}\n\n`;
           controller.enqueue(encoder.encode(initialChunk));
 
-          // Unified TokenJuice DeepSeek V4.1 Engine for all models
-          await streamTokenJuice(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks, modelDisplayName, ownerName);
+          // Unified ProRouter Gateway Engine for all models
+          await streamGateway(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks, modelDisplayName, ownerName);
         },
       });
 
@@ -826,19 +827,19 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     }
 
     // ── B) NON-STREAMING MODE ──
-    // Unified TokenJuice DeepSeek V4.1 Engine
-    // 2. All Other Models (or fallback) -> TokenJuice DeepSeek V4.1
+    // Unified ProRouter Gateway Engine
+    // 2. All Other Models -> ProRouter Gateway
     const abortCtrl = new AbortController();
     const timeoutId = setTimeout(() => abortCtrl.abort(), 55000);
-    const upstreamUrl = `${TOKENJUICE_BASE.replace(/\/+$/, "")}/chat/completions`;
+    const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
       ...payload,
       messages: effectiveMessages,
-      model: TOKENJUICE_MODEL,
+      model: GATEWAY_MODEL,
     };
 
     try {
-      const { res: upstreamRes } = await fetchTokenJuiceWithRetry(upstreamUrl, upstreamBody, abortCtrl.signal);
+      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, abortCtrl.signal);
       clearTimeout(timeoutId);
 
       if (upstreamRes.ok) {

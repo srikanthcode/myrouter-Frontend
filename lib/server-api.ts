@@ -103,6 +103,65 @@ export function compactNumber(n: number): string {
 
 // ── Default Built-in Plans ───────────────────────────────────────────────────
 
+export interface PackageSummary {
+  id: string;
+  slug: string;
+  name: string;
+  pricePaise: number;
+  priceFormatted: string;
+  bonusPaise: number;
+  totalPaise: number;
+  totalFormatted: string;
+  currency: string;
+}
+
+export const DEFAULT_PACKAGES: PackageSummary[] = [
+  {
+    id: "pkg-starter-100",
+    slug: "starter-100",
+    name: "Starter Pack",
+    pricePaise: 10000,
+    priceFormatted: "₹100",
+    bonusPaise: 0,
+    totalPaise: 10000,
+    totalFormatted: "₹100",
+    currency: "INR",
+  },
+  {
+    id: "pkg-pro-500",
+    slug: "pro-500",
+    name: "Pro Pack",
+    pricePaise: 50000,
+    priceFormatted: "₹500",
+    bonusPaise: 5000,
+    totalPaise: 55000,
+    totalFormatted: "₹550",
+    currency: "INR",
+  },
+  {
+    id: "pkg-scale-1000",
+    slug: "scale-1000",
+    name: "Scale Pack",
+    pricePaise: 100000,
+    priceFormatted: "₹1,000",
+    bonusPaise: 20000,
+    totalPaise: 120000,
+    totalFormatted: "₹1,200",
+    currency: "INR",
+  },
+  {
+    id: "pkg-power-2500",
+    slug: "power-2500",
+    name: "Power Pack",
+    pricePaise: 250000,
+    priceFormatted: "₹2,500",
+    bonusPaise: 65000,
+    totalPaise: 315000,
+    totalFormatted: "₹3,150",
+    currency: "INR",
+  },
+];
+
 export const DEFAULT_PLANS: PlanSummary[] = [
   {
     id: "plan-free",

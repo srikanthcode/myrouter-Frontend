@@ -1,9 +1,10 @@
+import { cx } from "@/lib/api";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Check, CreditCard, Landmark, ReceiptText, Sparkles, Wallet, Webhook } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { Badge, EmptyState } from "@/components/ui";
-import { fetchJson, DEFAULT_PLANS, type PlanSummary } from "@/lib/server-api";
+import { fetchJson, DEFAULT_PLANS, DEFAULT_PACKAGES, type PlanSummary, type PackageSummary } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "ProRouter Pricing — Transparent Token Pricing, Free Tier & Pay-As-You-Go",
@@ -31,17 +32,7 @@ export const metadata: Metadata = {
   },
 };
 
-interface PackageSummary {
-  id: string;
-  slug: string;
-  name: string;
-  pricePaise: number;
-  priceFormatted: string;
-  bonusPaise: number;
-  totalPaise: number;
-  totalFormatted: string;
-  currency: string;
-}
+
 
 interface AstraPromo {
   available: boolean;
@@ -75,7 +66,7 @@ export default async function PricingPage() {
   ]);
 
   const plans = plansRes?.items && plansRes.items.length > 0 ? plansRes.items : DEFAULT_PLANS;
-  const packages = packagesRes?.items ?? [];
+  const packages = packagesRes?.items && packagesRes.items.length > 0 ? packagesRes.items : DEFAULT_PACKAGES;
   const campaign = astra?.available ? astra.campaign : null;
 
   return (
@@ -99,7 +90,7 @@ export default async function PricingPage() {
           ) : (
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {plans.map((p) => {
-                const featured = p.slug === "boost";
+                const featured = p.slug === "builder";
                 return (
                   <div key={p.slug} className={featured ? "relative flex flex-col rounded-xl border border-accent/40 bg-panel p-6" : "relative flex flex-col rounded-xl border border-line bg-panel p-6"}>
                     {featured && <span className="absolute -top-2.5 left-6"><Badge tone="accent">Most popular</Badge></span>}
@@ -129,8 +120,8 @@ export default async function PricingPage() {
                       <div><dt className="text-mut2">Queue priority</dt><dd className="font-mono tabular-nums">{p.queuePriority}</dd></div>
                     </dl>
 
-                    <Link href={p.pricePaise === 0 ? "/signup" : "/dashboard"} className={`mt-6 ${featured ? linkButtonPrimary : linkButtonSecondary}`}>
-                      {p.pricePaise === 0 ? "Start free" : `Choose ${p.name}`}
+                    <Link href={p.pricePaise === 0 ? "/signup" : `/dashboard/wallet?package=${p.slug}`} className={`mt-6 ${featured ? linkButtonPrimary : linkButtonSecondary}`}>
+                      {p.pricePaise === 0 ? "Start free" : `Choose ${p.name} (${p.priceFormatted})`}
                     </Link>
                   </div>
                 );
@@ -173,30 +164,82 @@ export default async function PricingPage() {
         )}
 
         {/* Credit packages */}
-        <section className="mt-12">
-          <h2 className="text-lg font-semibold tracking-tight">Wallet credits</h2>
-          <p className="mt-1 text-[13.5px] text-mut">Prepaid credits never expire. Some packages include bonus credit on top of what you pay.</p>
+        <section className="mt-14">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Badge tone="accent">Pay-As-You-Go</Badge>
+                <Badge tone="good">Instant Razorpay UPI, Cards & NetBanking</Badge>
+              </div>
+              <h2 className="mt-2.5 text-xl font-semibold tracking-tight sm:text-2xl">Wallet Credits & Top-Up Packs</h2>
+              <p className="mt-1 text-[13.5px] text-mut max-w-2xl">
+                Prepaid token credits with zero markup and no expiry. Add funds securely via UPI (GPay, PhonePe, Paytm, BHIM), Credit/Debit Cards, or NetBanking.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/wallet"
+              className={linkButtonPrimary}
+            >
+              Open Wallet & Pay
+            </Link>
+          </div>
 
-          {packages.length === 0 ? (
-            <div className="mt-6">
-              <EmptyState icon={<Wallet className="size-5" strokeWidth={1.75} />} title="No credit packages configured on this deployment." />
-            </div>
-          ) : (
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {packages.map((pkg) => (
-                <div key={pkg.slug} className="flex flex-col rounded-xl border border-line bg-panel p-5">
-                  <h3 className="text-[15px] font-semibold">{pkg.name}</h3>
-                  <div className="mt-3 font-mono text-xl font-semibold tabular-nums">{pkg.priceFormatted}</div>
-                  {pkg.bonusPaise > 0 ? (
-                    <div className="mt-1.5 text-[12.5px] text-good">+ {pkg.totalFormatted} total credit</div>
-                  ) : (
-                    <div className="mt-1.5 text-[12.5px] text-mut2">No bonus</div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {packages.map((pkg) => {
+              const isPopular = pkg.slug === "pro-500" || pkg.slug === "scale-1000";
+              return (
+                <div
+                  key={pkg.slug}
+                  className={cx(
+                    "relative flex flex-col rounded-xl border bg-panel p-5 shadow-sm transition-all duration-200 hover:border-accent/60",
+                    isPopular ? "border-accent/40 bg-panel/95" : "border-line"
                   )}
-                  <Link href="/dashboard/wallet" className={`mt-5 ${linkButtonSecondarySm}`}>Buy credits</Link>
+                >
+                  {isPopular && (
+                    <span className="absolute -top-2.5 left-5">
+                      <Badge tone="accent">Recommended</Badge>
+                    </span>
+                  )}
+                  <h3 className="text-[15.5px] font-semibold text-fg">{pkg.name}</h3>
+                  <div className="mt-2 flex items-baseline gap-1.5">
+                    <span className="font-mono text-2xl font-semibold tabular-nums text-fg">{pkg.priceFormatted}</span>
+                    <span className="text-[12px] text-mut2">one-time</span>
+                  </div>
+
+                  <div className="mt-2 flex-1 space-y-1.5 text-[12.5px]">
+                    {pkg.bonusPaise > 0 ? (
+                      <div className="inline-flex items-center gap-1 rounded bg-good/10 px-2 py-0.5 font-medium text-good">
+                        + {pkg.totalFormatted} total credits (bonus included)
+                      </div>
+                    ) : (
+                      <div className="text-mut2">100% credited to your wallet balance</div>
+                    )}
+                    <ul className="mt-3 space-y-1.5 text-mut text-[12px]">
+                      <li className="flex items-center gap-1.5">
+                        <Check className="size-3.5 text-accent shrink-0" />
+                        <span>Valid for all 35+ frontier models</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="size-3.5 text-accent shrink-0" />
+                        <span>Never expires · No minimums</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="size-3.5 text-accent shrink-0" />
+                        <span>Instant Razorpay checkout</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <Link
+                    href={`/dashboard/wallet?package=${pkg.slug}`}
+                    className={`mt-5 ${isPopular ? linkButtonPrimary : linkButtonSecondarySm} w-full text-center`}
+                  >
+                    Buy for {pkg.priceFormatted}
+                  </Link>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </section>
 
         {/* Billing notes */}

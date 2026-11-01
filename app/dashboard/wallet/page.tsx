@@ -72,6 +72,75 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
+const DEFAULT_WALLET_PACKAGES: PackageItem[] = [
+  {
+    id: "pkg-starter-100",
+    slug: "starter-100",
+    name: "Starter Pack",
+    pricePaise: 10000,
+    priceFormatted: "₹100",
+    bonusPaise: 0,
+    totalPaise: 10000,
+    totalFormatted: "₹100",
+    currency: "INR",
+  },
+  {
+    id: "pkg-pro-500",
+    slug: "pro-500",
+    name: "Pro Pack",
+    pricePaise: 50000,
+    priceFormatted: "₹500",
+    bonusPaise: 5000,
+    totalPaise: 55000,
+    totalFormatted: "₹550",
+    currency: "INR",
+  },
+  {
+    id: "pkg-scale-1000",
+    slug: "scale-1000",
+    name: "Scale Pack",
+    pricePaise: 100000,
+    priceFormatted: "₹1,000",
+    bonusPaise: 20000,
+    totalPaise: 120000,
+    totalFormatted: "₹1,200",
+    currency: "INR",
+  },
+  {
+    id: "pkg-power-2500",
+    slug: "power-2500",
+    name: "Power Pack",
+    pricePaise: 250000,
+    priceFormatted: "₹2,500",
+    bonusPaise: 65000,
+    totalPaise: 315000,
+    totalFormatted: "₹3,150",
+    currency: "INR",
+  },
+  {
+    id: "pkg-builder",
+    slug: "builder",
+    name: "Builder Plan",
+    pricePaise: 99900,
+    priceFormatted: "₹999",
+    bonusPaise: 5100,
+    totalPaise: 105000,
+    totalFormatted: "₹1,050",
+    currency: "INR",
+  },
+  {
+    id: "pkg-pro",
+    slug: "pro",
+    name: "Pro Plan",
+    pricePaise: 249900,
+    priceFormatted: "₹2,499",
+    bonusPaise: 25100,
+    totalPaise: 275000,
+    totalFormatted: "₹2,750",
+    currency: "INR",
+  },
+];
+
 export default function WalletPage() {
   const toast = useToast();
   const { me, refresh } = useSession();
@@ -90,7 +159,8 @@ export default function WalletPage() {
         api<{ items: Payment[] }>("/payments"),
       ]);
       setWallet(w);
-      setPackages(Array.isArray(p?.items) ? p.items : Array.isArray(p) ? (p as unknown as PackageItem[]) : []);
+      const items = Array.isArray(p?.items) && p.items.length > 0 ? p.items : Array.isArray(p) && (p as unknown as PackageItem[]).length > 0 ? (p as unknown as PackageItem[]) : DEFAULT_WALLET_PACKAGES;
+      setPackages(items);
       setPayments(Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : []);
       setError(null);
     } catch (e) {

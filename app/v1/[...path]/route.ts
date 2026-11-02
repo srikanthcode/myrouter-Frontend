@@ -98,6 +98,39 @@ const FREEMODELS_TIERED_MODELS = new Set([
   "pr-zenith",
 ]);
 
+const REQUESTY_BASE = (process.env.PROVIDER_REQUESTY_BASE_URL || "https://router.requesty.ai/v1").replace(/\/+$/, "");
+const REQUESTY_API_KEY = process.env.PROVIDER_REQUESTY_API_KEY || "rqsty-sk-UHWzpsQeSyistG7QCH0js1fkpVs8F0PlpivUFr1SY7fMJHtIBIiLO6QVDHT5GHcBwVyArZuRVa29GprbxTIzh8es3tkGzRoLUX6hwvOglwc=";
+
+export const REQUESTY_MODELS_MAP: Record<string, string> = {
+  "leanstral-1-5": "mistral/leanstral-1-5",
+  "mistral/leanstral-1-5": "mistral/leanstral-1-5",
+  "laguna-xs.2": "poolside/laguna-xs.2",
+  "poolside/laguna-xs.2": "poolside/laguna-xs.2",
+  "laguna-m.1": "poolside/laguna-m.1",
+  "poolside/laguna-m.1": "poolside/laguna-m.1",
+  "inclusionai/ling-3.0-tiny": "novita/inclusionai/ling-3.0-tiny",
+  "novita/inclusionai/ling-3.0-tiny": "novita/inclusionai/ling-3.0-tiny",
+  "ling-3.0-tiny": "novita/inclusionai/ling-3.0-tiny",
+  "ling-3.1-flash": "novita/ling-3.1-flash",
+  "novita/ling-3.1-flash": "novita/ling-3.1-flash",
+  "nemotron-3-nano-30b-a3b": "nvidia/nemotron-3-nano-30b-a3b",
+  "nvidia/nemotron-3-nano-30b-a3b": "nvidia/nemotron-3-nano-30b-a3b",
+  "nemotron-3-nano-omni-30b-a3b-reasoning": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "nemotron-3-super-120b-a12b": "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/nemotron-3-super-120b-a12b": "nvidia/nemotron-3-super-120b-a12b",
+  "nemotron-3.5-content-safety": "nvidia/nemotron-3.5-content-safety",
+  "nvidia/nemotron-3.5-content-safety": "nvidia/nemotron-3.5-content-safety",
+  "nemotron-3.5-lightning-30b-a3b": "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3.5-lightning-30b-a3b": "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nemotron-3-ultra-550b-a55b": "nvidia/nemotron-3-ultra-550b-a55b",
+  "nvidia/nemotron-3-ultra-550b-a55b": "nvidia/nemotron-3-ultra-550b-a55b",
+  "muse-glimmer-30b": "nvidia/muse-glimmer-30b",
+  "nvidia/muse-glimmer-30b": "nvidia/muse-glimmer-30b",
+  "gemma-4-31b-it": "google/gemma-4-31b-it",
+  "google/gemma-4-31b-it": "google/gemma-4-31b-it",
+};
+
 const FREEMODELS_UPSTREAM_MAP: Record<string, string> = {
   "pr-echo": "claude-sonnet-5",
   "pr-swift": "sol",

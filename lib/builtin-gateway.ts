@@ -319,20 +319,10 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   // ── Wallet ──
   if (subpath === "/wallet") {
     return NextResponse.json({
-      balancePaise: 25000,
-      balanceFormatted: "₹250.00",
+      balancePaise: globalFallbackWallet.balancePaise,
+      balanceFormatted: `₹${(globalFallbackWallet.balancePaise / 100).toFixed(2)}`,
       currency: "INR",
-      transactions: [
-        {
-          id: "tx_welcome",
-          type: "gift",
-          amountPaise: 25000,
-          amountFormatted: "₹250.00",
-          balanceAfterPaise: 25000,
-          reference: "Welcome bonus",
-          createdAt: new Date().toISOString(),
-        },
-      ],
+      transactions: globalFallbackWallet.transactions,
     });
   }
 
@@ -515,6 +505,14 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       gatewayOrderId = "order_" + Math.random().toString(36).slice(2, 16);
     }
 
+    globalFallbackWallet.orders.set(gatewayOrderId, {
+      amountPaise: pkg.priceMinor,
+      totalPaise: pkg.priceMinor + (pkg.bonusPaise || 0),
+      invoice,
+      name: pkg.name,
+      currency: pkg.currency,
+    });
+
     return NextResponse.json({
       paymentId,
       invoice,
@@ -545,10 +543,42 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       }
     }
 
+    const order = razorpayOrderId ? globalFallbackWallet.orders.get(razorpayOrderId) : undefined;
+    const addedPaise = order ? order.totalPaise : 50000;
+    const paidPaise = order ? order.amountPaise : 50000;
+    const invoiceNum = order ? order.invoice : ("PRO-" + Date.now().toString(36).toUpperCase());
+    const paymentId = razorpayPaymentId || body.paymentId || ("pay_" + Date.now());
+
+    globalFallbackWallet.balancePaise += addedPaise;
+
+    if (!globalFallbackWallet.transactions.some((t) => t.id === "tx_" + paymentId)) {
+      globalFallbackWallet.transactions.unshift({
+        id: "tx_" + paymentId,
+        type: "topup",
+        amountPaise: addedPaise,
+        amountFormatted: "+₹" + (addedPaise / 100).toFixed(2),
+        balanceAfterPaise: globalFallbackWallet.balancePaise,
+        reference: invoiceNum,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (!globalFallbackWallet.payments.some((p) => p.id === paymentId || p.invoice === invoiceNum)) {
+      globalFallbackWallet.payments.unshift({
+        id: paymentId,
+        invoice: invoiceNum,
+        amountPaise: paidPaise,
+        amountFormatted: "₹" + (paidPaise / 100).toFixed(2),
+        gateway: "razorpay",
+        status: "captured",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
     return NextResponse.json({
       success: true,
       status: "captured",
-      paymentId: body.paymentId,
+      paymentId: body.paymentId || paymentId,
       gatewayPaymentId: razorpayPaymentId,
       credited: true,
     });
@@ -556,7 +586,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
 
   if (subpath === "/payments") {
     return NextResponse.json({
-      items: [],
+      items: globalFallbackWallet.payments,
     });
   }
 

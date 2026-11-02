@@ -271,7 +271,12 @@ export default function WalletPage() {
         throw new Error("Could not initialize payment order. Please try again.");
       }
 
-      const razorpayKey = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_live_TDesBovNH5VpIY";
+      const razorpayKey = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        toast.push("Razorpay Key ID is not configured on this environment.", "error");
+        setBusy(false);
+        return;
+      }
 
       const options = {
         key: razorpayKey,

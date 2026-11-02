@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { api, cx, formatINR } from "@/lib/api";
+import { useDashboardEvents } from "@/lib/useDashboardEvents";
 import { Logo } from "./Logo";
 import { Badge, IconButton, useToast } from "./ui";
 
@@ -62,6 +63,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useDashboardEvents((evt) => {
+    if (evt.type === "wallet.balance.updated" && typeof evt.data?.balancePaise === "number") {
+      setMe((prev) => (prev ? { ...prev, balancePaise: evt.data.balancePaise } : null));
+    } else if (evt.type === "payment.completed") {
+      void refresh();
+    }
+  });
   return <SessionCtx.Provider value={{ me, loading, refresh }}>{children}</SessionCtx.Provider>;
 }
 

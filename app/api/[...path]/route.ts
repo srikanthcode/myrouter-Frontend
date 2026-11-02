@@ -39,8 +39,9 @@ async function proxyRequest(req: NextRequest, path: string[]) {
       }
     }
 
+    const isEventStream = subpath.includes("events") || req.headers.get("accept")?.includes("text/event-stream");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+    const timeoutId = isEventStream ? null : setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
     try {
       const backendRes = await fetch(targetUrl, {
@@ -50,12 +51,12 @@ async function proxyRequest(req: NextRequest, path: string[]) {
         signal: controller.signal,
         redirect: "manual",
       });
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
 
       const contentType = backendRes.headers.get("content-type") || "";
 
-      // If backend responded with a healthy JSON response, return it directly!
-      if (backendRes.ok && contentType.includes("application/json")) {
+      // If backend responded with JSON or SSE stream, return it directly!
+      if (backendRes.ok && (contentType.includes("application/json") || contentType.includes("text/event-stream"))) {
         lastBackendFailureTime = 0; // Backend is healthy
         const resHeaders = new Headers();
         backendRes.headers.forEach((val: string, key: string) => {
@@ -83,7 +84,7 @@ async function proxyRequest(req: NextRequest, path: string[]) {
         lastBackendFailureTime = Date.now();
       }
     } catch {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       lastBackendFailureTime = Date.now();
     }
   }

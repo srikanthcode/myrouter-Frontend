@@ -5,6 +5,7 @@ import { ArrowDownToLine, ArrowUpFromLine, CreditCard, History, Package, Receipt
 import { ApiError, api, cx, formatINR, timeAgo } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, Modal, Skeleton, useToast } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
+import { useDashboardEvents } from "@/lib/useDashboardEvents";
 
 interface WalletData {
   balancePaise: number;
@@ -220,6 +221,26 @@ export default function WalletPage() {
   const [buying, setBuying] = useState<PackageItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
+  type CheckoutState = "IDLE" | "INITIALIZING" | "CHECKOUT_OPEN" | "VERIFYING" | "PAYMENT_CONFIRMED" | "FAILED" | "CANCELLED";
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>("IDLE");
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+
+  // Preload Razorpay SDK once on component mount
+  useEffect(() => {
+    void loadRazorpayScript();
+  }, []);
+
+  // Listen to real-time events for instant updates
+  useDashboardEvents((evt) => {
+    if (
+      evt.type === "wallet.balance.updated" ||
+      evt.type === "payment.completed" ||
+      evt.type === "ledger.entry.created"
+    ) {
+      void load();
+      void refresh();
+    }
+  });
 
   const load = useCallback(async () => {
     try {
@@ -245,13 +266,18 @@ export default function WalletPage() {
   }, [load, refresh]);
 
   async function checkout(pkg: PackageItem) {
+    if (busy) return;
     setBusy(true);
+    setActiveSlug(pkg.slug);
+    setCheckoutState("INITIALIZING");
     try {
       const loaded = await loadRazorpayScript();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (!loaded || !(window as any).Razorpay) {
         toast.push("Could not load Razorpay payment gateway. Please check your connection.", "error");
         setBusy(false);
+        setActiveSlug(null);
+        setCheckoutState("FAILED");
         return;
       }
 
@@ -275,6 +301,8 @@ export default function WalletPage() {
       if (!razorpayKey) {
         toast.push("Razorpay Key ID is not configured on this environment.", "error");
         setBusy(false);
+        setActiveSlug(null);
+        setCheckoutState("FAILED");
         return;
       }
 
@@ -292,7 +320,7 @@ export default function WalletPage() {
           razorpay_signature: string;
         }) {
           try {
-            setBusy(true);
+            setCheckoutState("VERIFYING");
             await api("/wallet/verify", {
               method: "POST",
               body: {
@@ -302,14 +330,18 @@ export default function WalletPage() {
                 razorpaySignature: response.razorpay_signature,
               },
             });
+            setCheckoutState("PAYMENT_CONFIRMED");
             toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
             setBuying(null);
             await load();
             await refresh();
           } catch (verifyErr) {
+            setCheckoutState("FAILED");
             toast.push(verifyErr instanceof ApiError ? verifyErr.message : "Payment verification failed. Please contact support.", "error");
           } finally {
             setBusy(false);
+            setActiveSlug(null);
+            setTimeout(() => setCheckoutState("IDLE"), 2000);
           }
         },
         prefill: {
@@ -326,6 +358,9 @@ export default function WalletPage() {
         modal: {
           ondismiss: () => {
             setBusy(false);
+            setActiveSlug(null);
+            setCheckoutState("CANCELLED");
+            setTimeout(() => setCheckoutState("IDLE"), 1000);
           },
         },
       };
@@ -336,11 +371,18 @@ export default function WalletPage() {
       rzp.on("payment.failed", (failRes: any) => {
         toast.push(failRes?.error?.description || "Payment failed. Please try another payment method.", "error");
         setBusy(false);
+        setActiveSlug(null);
+        setCheckoutState("FAILED");
+        setTimeout(() => setCheckoutState("IDLE"), 2000);
       });
+      setCheckoutState("CHECKOUT_OPEN");
       rzp.open();
     } catch (e) {
       toast.push(e instanceof ApiError ? e.message : "Could not start checkout.", "error");
       setBusy(false);
+      setActiveSlug(null);
+      setCheckoutState("FAILED");
+      setTimeout(() => setCheckoutState("IDLE"), 1500);
     }
   }
 
@@ -455,8 +497,22 @@ export default function WalletPage() {
                     <span className="text-mut2">No bonus credit</span>
                   )}
                 </div>
-                <Button className="mt-4" size="sm" onClick={() => setBuying(p)}>
-                  Buy {p.priceFormatted}
+                <Button
+                  className="mt-4"
+                  size="sm"
+                  disabled={busy && activeSlug !== p.slug}
+                  loading={busy && activeSlug === p.slug}
+                  onClick={() => void checkout(p)}
+                >
+                  {activeSlug === p.slug
+                    ? checkoutState === "INITIALIZING"
+                      ? "Initializing..."
+                      : checkoutState === "CHECKOUT_OPEN"
+                        ? "Checkout Active"
+                        : checkoutState === "VERIFYING"
+                          ? "Verifying..."
+                          : `Buy ${p.priceFormatted}`
+                    : `Buy ${p.priceFormatted}`}
                 </Button>
               </Card>
             ))}

@@ -1,15 +1,23 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowDown, ArrowRight, ArrowUp, Search, SearchX } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Search, SearchX, Sparkles, ShieldCheck } from "lucide-react";
 import { PageHeader, PublicShell } from "@/components/PublicShell";
 import { Badge, Button, EmptyState, Input } from "@/components/ui";
 import { cx } from "@/lib/api";
-import { compactNumber, fetchJson, formatPerMillion, getFilteredDefaultModels, DEFAULT_PROVIDERS, type ModelSummary, type ProviderSummary } from "@/lib/server-api";
+import {
+  compactNumber,
+  fetchJson,
+  formatDualPricing,
+  getFilteredDefaultModels,
+  DEFAULT_PROVIDERS,
+  type ModelSummary,
+  type ProviderSummary,
+} from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "AI Model Directory — 35+ LLMs & Frontier APIs | ProRouter",
+  title: "AI Model Directory — 34+ Frontier LLMs & APIs | ProRouter",
   description:
-    "Explore 35+ frontier and open-weight AI models including DeepSeek V4.1, Claude 3.5 Sonnet, Moonshot Kimi K2.7 Code, and OpenAI. Compare real-time token pricing, context windows, and latency.",
+    "Explore 34+ unique AI models including DeepSeek V4.1, Claude 3.5 Sonnet, Moonshot Kimi K2.7 Code, Google Gemini 1.5 Pro, and OpenAI. Compare real-time token pricing in INR and USD with India localized developer rates.",
   keywords: [
     "AI models",
     "LLM directory",
@@ -17,18 +25,18 @@ export const metadata: Metadata = {
     "DeepSeek API",
     "Claude Sonnet API",
     "Kimi K2.7 Code",
-    "Qwen 3.8",
+    "Gemini Pro 1M context",
     "AI API pricing",
     "ProRouter models",
-    "best LLM router",
+    "India AI API discount",
   ],
   alternates: {
     canonical: "https://www.prorouter.in/models",
   },
   openGraph: {
-    title: "AI Model Directory — 35+ LLMs & Frontier APIs | ProRouter",
+    title: "AI Model Directory — 34+ Frontier LLMs & APIs | ProRouter",
     description:
-      "Explore 35+ frontier and open-weight AI models with unified API keys and transparent per-token pricing.",
+      "Explore 34+ unique frontier AI models with unified API keys and transparent token pricing in INR & USD.",
     url: "https://www.prorouter.in/models",
     siteName: "ProRouter",
     type: "website",
@@ -58,7 +66,7 @@ const sorts: Array<{ key: string; label: string; dir?: "asc" | "desc" }> = [
   { key: "price_desc", label: "Price", dir: "desc" },
 ];
 
-/* Tab-like catalogue filter chip (hairline border, flat surface). */
+/* Tab-like catalogue filter chip */
 const chipBase =
   "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-[12.5px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const chipActive = "border-accent/40 bg-accent/10 text-accent";
@@ -84,6 +92,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
   const free = one(sp.free) ?? "";
   const category = one(sp.category) ?? "";
   const sort = one(sp.sort) ?? "popularity";
+  const currency = (one(sp.currency) || "INR").toUpperCase() === "USD" ? "USD" : "INR";
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
@@ -98,16 +107,24 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
     fetchJson<ProviderSummary[]>("/providers"),
   ]);
 
-  const models = modelsRes?.items && modelsRes.items.length > 0 ? modelsRes.items : getFilteredDefaultModels({ q, provider, free, category, sort });
+  const rawModels = modelsRes?.items && modelsRes.items.length > 0 ? modelsRes.items : getFilteredDefaultModels({ q, provider, free, category, sort });
+  // Deduplicate models by slug so no duplicate data is ever displayed
+  const seenSlugs = new Set<string>();
+  const models = rawModels.filter((m) => {
+    if (seenSlugs.has(m.slug)) return false;
+    seenSlugs.add(m.slug);
+    return true;
+  });
+
   const providers = providersRes && providersRes.length > 0 ? providersRes : DEFAULT_PROVIDERS;
-  const current = { q, provider, free, category, sort: sort === "popularity" ? "" : sort };
+  const current = { q, provider, free, category, sort: sort === "popularity" ? "" : sort, currency };
 
   return (
     <PublicShell>
       <PageHeader
         eyebrow="Model catalogue"
-        title="Every model, one endpoint."
-        subtitle="Pricing is shown per million tokens in INR. Rate limits and the shared queue are set by your plan."
+        title="34+ Models. One Universal Endpoint."
+        subtitle="Transparent per-million token pricing in INR and USD. Zero latency overhead and intelligent failover."
       >
         <form action="/models" method="get" className="flex max-w-lg gap-2">
           <div className="min-w-0 flex-1">
@@ -115,13 +132,14 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
               type="search"
               name="q"
               defaultValue={q}
-              placeholder="Search models…"
+              placeholder="Search models, providers, or capabilities…"
               aria-label="Search models"
               trailing={<Search className="size-4 text-mut2" strokeWidth={1.75} aria-hidden="true" />}
             />
           </div>
           {provider && <input type="hidden" name="provider" value={provider} />}
           {free && <input type="hidden" name="free" value={free} />}
+          {currency && <input type="hidden" name="currency" value={currency} />}
           <Button type="submit" className="shrink-0">
             Search
           </Button>
@@ -129,6 +147,53 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
       </PageHeader>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        {/* ── India Developer Advantage Banner ── */}
+        <div className="mb-8 relative overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/15 via-panel/80 to-panel p-5 shadow-lg shadow-accent/5 backdrop-blur-xs transition-all duration-300">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+            <div className="space-y-1.5 max-w-3xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-0.5 text-xs font-semibold text-emerald-400">
+                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  🇮🇳 India Developer Advantage (~10% Localized Discount)
+                </span>
+                <span className="text-[12px] font-mono text-accent">₹80.00 INR = $1.00 USD</span>
+              </div>
+              <p className="text-[13.5px] leading-relaxed text-fg/90">
+                Models charging <strong>$1.00 USD / 1M tokens</strong> globally are billed at only <strong>₹80.00 INR / 1M tokens</strong> in India. You save ~10% on raw token pricing, completely avoid 3.5% foreign exchange credit card markups, and pay instantly via <strong>UPI (Google Pay, PhonePe, Paytm, BHIM)</strong> or RuPay cards.
+              </p>
+            </div>
+
+            {/* Currency Switcher Toggle */}
+            <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0 self-stretch md:self-auto">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-mut2">Select Currency</div>
+              <div className="inline-flex rounded-xl border border-line bg-panel2/90 p-1 shadow-inner">
+                <Link
+                  href={buildQuery(current, { currency: "INR" })}
+                  className={cx(
+                    "flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-200",
+                    currency === "INR"
+                      ? "bg-accent text-accent-ink shadow-sm"
+                      : "text-mut hover:text-fg"
+                  )}
+                >
+                  <span>🇮🇳</span> INR (₹)
+                </Link>
+                <Link
+                  href={buildQuery(current, { currency: "USD" })}
+                  className={cx(
+                    "flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-200",
+                    currency === "USD"
+                      ? "bg-accent text-accent-ink shadow-sm"
+                      : "text-mut hover:text-fg"
+                  )}
+                >
+                  <span>🇺🇸</span> USD ($)
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="mb-6 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -180,7 +245,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
         </div>
 
         <div className="mb-4 text-[13px] text-mut">
-          <span className="font-mono tabular-nums">{models.length}</span> model{models.length === 1 ? "" : "s"}
+          <span className="font-mono tabular-nums">{models.length}</span> unique model{models.length === 1 ? "" : "s"}
           {modelsRes?.total != null && modelsRes.total !== models.length ? (
             <>
               {" "}
@@ -201,49 +266,115 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
             }
           />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {models.map((m) => (
-              <Link
-                key={m.slug}
-                href={`/models/${m.slug}`}
-                className="group flex cursor-pointer flex-col rounded-xl border border-line bg-panel p-5 transition-colors duration-200 hover:border-accent/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-[15px] font-semibold text-fg transition-colors duration-200 group-hover:text-accent">{m.name}</h2>
-                    <div className="mt-1 font-mono text-[11.5px] text-mut2">{m.slug}</div>
-                  </div>
-                </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {models.map((m) => {
+              const dual = formatDualPricing(m.pricing.inputPerMillion, m.pricing.outputPerMillion, m.isFree);
+              const isOneMillion = m.contextWindow >= 1000000;
+              const isQuarterMillion = m.contextWindow >= 250000;
+              const isTwoHundredK = m.contextWindow >= 200000;
 
-                <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-relaxed text-mut">{m.description}</p>
+              return (
+                <Link
+                  key={m.slug}
+                  href={`/models/${m.slug}`}
+                  className="group relative flex cursor-pointer flex-col rounded-2xl border border-line/80 bg-panel/95 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-accent/50 hover:shadow-xl hover:shadow-accent/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent backdrop-blur-xs"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="truncate text-[15.5px] font-semibold text-fg transition-colors duration-200 group-hover:text-accent">
+                          {m.name}
+                        </h2>
+                        {m.isFree && (
+                          <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                            FREE
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-mut2">{m.slug}</div>
+                    </div>
 
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {m.isFree && <Badge tone="free">FREE</Badge>}
-                  <Badge tone="neutral">{m.providerName}</Badge>
-                  <Badge tone="neutral">
-                    <span className="font-mono tabular-nums">{compactNumber(m.contextWindow)}</span> ctx
-                  </Badge>
-                  {m.capabilities.vision && <Badge tone="neutral">vision</Badge>}
-                  {m.capabilities.toolCalls && <Badge tone="neutral">tools</Badge>}
-                  {m.capabilities.reasoning && <Badge tone="neutral">reasoning</Badge>}
-                </div>
-
-                <div className="mt-4 flex items-end justify-between border-t border-line pt-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-wide text-mut2">Input / output</div>
-                    <div className="mt-0.5 font-mono text-[12.5px] tabular-nums text-fg">
-                      {m.isFree || (m.pricing.inputPerMillion === 0 && m.pricing.outputPerMillion === 0)
-                        ? "₹0 (Free tier)"
-                        : `${formatPerMillion(m.pricing.inputPerMillion)} / ${formatPerMillion(m.pricing.outputPerMillion)}`}
+                    <div className="shrink-0">
+                      {isOneMillion ? (
+                        <span className="rounded-full bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 font-mono text-[11px] font-bold text-indigo-300 shadow-xs shadow-indigo-500/20">
+                          1M ctx
+                        </span>
+                      ) : isQuarterMillion ? (
+                        <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
+                          {compactNumber(m.contextWindow)} ctx
+                        </span>
+                      ) : isTwoHundredK ? (
+                        <span className="rounded-full bg-sky-500/20 border border-sky-500/40 px-2.5 py-0.5 font-mono text-[11px] font-bold text-sky-300">
+                          {compactNumber(m.contextWindow)} ctx
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-white/[0.05] border border-line px-2.5 py-0.5 font-mono text-[11px] text-mut">
+                          {compactNumber(m.contextWindow)} ctx
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                    View
-                    <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" strokeWidth={1.75} aria-hidden="true" />
-                  </span>
-                </div>
-              </Link>
-            ))}
+
+                  <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-relaxed text-mut">
+                    {m.description}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    <Badge tone="neutral">{m.providerName}</Badge>
+                    {m.capabilities.vision && <Badge tone="neutral">vision</Badge>}
+                    {m.capabilities.toolCalls && <Badge tone="neutral">tools</Badge>}
+                    {m.capabilities.reasoning && <Badge tone="neutral">reasoning</Badge>}
+                    {m.capabilities.audio && <Badge tone="neutral">audio</Badge>}
+                    {m.maxOutputTokens && (
+                      <span className="rounded-md border border-line2/40 bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] text-mut2">
+                        {compactNumber(m.maxOutputTokens)} out
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex items-end justify-between border-t border-line/70 pt-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-mut2">
+                        <span>Input / output (1M tokens)</span>
+                        {!m.isFree && currency === "INR" && (
+                          <span className="text-[10px] text-emerald-400 font-semibold font-mono">🇮🇳 ₹80/$1</span>
+                        )}
+                      </div>
+                      <div className="mt-1 font-mono text-[13px] font-semibold tabular-nums text-fg flex items-baseline gap-2">
+                        {currency === "INR" ? (
+                          <>
+                            <span className={m.isFree ? "text-emerald-400" : "text-fg"}>
+                              {dual.inrPerMillion}
+                            </span>
+                            {!m.isFree && (
+                              <span className="text-[11px] text-mut2 font-normal">
+                                ({dual.usdPerMillion} USD)
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className={m.isFree ? "text-emerald-400" : "text-fg"}>
+                              {dual.usdPerMillion}
+                            </span>
+                            {!m.isFree && (
+                              <span className="text-[11px] text-mut2 font-normal">
+                                ({dual.inrPerMillion} INR)
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-accent opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0.5">
+                      View
+                      <ArrowRight className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

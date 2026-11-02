@@ -1,3 +1,39 @@
+
+interface FallbackTx {
+  id: string;
+  type: string;
+  amountPaise: number;
+  amountFormatted: string;
+  balanceAfterPaise: number;
+  reference: string | null;
+  createdAt: string;
+}
+
+interface FallbackPayment {
+  id: string;
+  invoice: string;
+  amountPaise: number;
+  amountFormatted: string;
+  gateway: string;
+  status: string;
+  createdAt: string;
+}
+
+interface FallbackPendingOrder {
+  amountPaise: number;
+  totalPaise: number;
+  invoice: string;
+  name: string;
+  currency: string;
+}
+
+const globalFallbackWallet = {
+  balancePaise: 0,
+  transactions: [] as FallbackTx[],
+  payments: [] as FallbackPayment[],
+  orders: new Map<string, FallbackPendingOrder>(),
+};
+
 import { NextRequest, NextResponse } from "next/server";
 import { Buffer } from "node:buffer";
 import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from "./server-api";

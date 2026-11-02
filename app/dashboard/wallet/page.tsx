@@ -249,11 +249,32 @@ export default function WalletPage() {
         api<{ items: PackageItem[] }>("/wallet/packages"),
         api<{ items: Payment[] }>("/payments"),
       ]);
-      setWallet(w);
+
+      if (w) {
+        // Strict deduplication of transactions by ID
+        const seenTx = new Set<string>();
+        const dedupedTxs = (w.transactions || []).filter((t) => {
+          if (!t.id || seenTx.has(t.id)) return false;
+          seenTx.add(t.id);
+          return true;
+        });
+        setWallet({ ...w, transactions: dedupedTxs });
+      } else {
+        setWallet(null);
+      }
+
       const fallbackP = currency === "USD" ? DEFAULT_WALLET_PACKAGES_USD : DEFAULT_WALLET_PACKAGES;
       const items = Array.isArray(p?.items) && p.items.length > 0 && p.items[0]?.currency === currency ? p.items : fallbackP;
       setPackages(items);
-      setPayments(Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : []);
+
+      const rawPayments = Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : [];
+      const seenPay = new Set<string>();
+      const dedupedPayments = rawPayments.filter((item) => {
+        if (!item.id || seenPay.has(item.id)) return false;
+        seenPay.add(item.id);
+        return true;
+      });
+      setPayments(dedupedPayments);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your wallet.");
@@ -333,6 +354,41 @@ export default function WalletPage() {
             setCheckoutState("PAYMENT_CONFIRMED");
             toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
             setBuying(null);
+
+            // Optimistically add the captured payment immediately to the board
+            const newPaymentRow: Payment = {
+              id: res.paymentId || response.razorpay_payment_id,
+              invoice: res.invoice,
+              amountPaise: res.amountPaise,
+              amountFormatted: formatINR(res.amountPaise),
+              gateway: "razorpay",
+              status: "captured",
+              createdAt: new Date().toISOString(),
+            };
+            setPayments((prev) => [newPaymentRow, ...prev.filter((p) => p.id !== newPaymentRow.id && p.invoice !== newPaymentRow.invoice)]);
+
+            // Optimistically update wallet balance and transaction ledger
+            const creditAdded = pkg.totalPaise || pkg.pricePaise;
+            setWallet((prev) => {
+              if (!prev) return prev;
+              const updatedBal = prev.balancePaise + creditAdded;
+              const newTx = {
+                id: "tx_" + Date.now(),
+                type: "topup",
+                amountPaise: creditAdded,
+                amountFormatted: formatINR(creditAdded),
+                balanceAfterPaise: updatedBal,
+                reference: res.invoice,
+                createdAt: new Date().toISOString(),
+              };
+              return {
+                ...prev,
+                balancePaise: updatedBal,
+                balanceFormatted: formatINR(updatedBal),
+                transactions: [newTx, ...prev.transactions.filter((t) => t.id !== newTx.id)],
+              };
+            });
+
             await load();
             await refresh();
           } catch (verifyErr) {

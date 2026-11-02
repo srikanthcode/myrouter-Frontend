@@ -405,8 +405,8 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/wallet/checkout" && method === "POST") {
-    const keyId = process.env.RAZORPAY_KEY_ID || "rzp_live_TDesBovNH5VpIY";
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "Wuy0swzagPlGFXcW2j21p4Lm";
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_TvHLS3Dlt6qygS";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "bHdafnoL9Gu2nx3zsjGiZ3z7";
     let body: Record<string, any> = {};
     try {
       body = (await req.json()) || {};
@@ -491,7 +491,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/wallet/verify" && method === "POST") {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "Wuy0swzagPlGFXcW2j21p4Lm";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "bHdafnoL9Gu2nx3zsjGiZ3z7";
     let body: Record<string, any> = {};
     try {
       body = (await req.json()) || {};

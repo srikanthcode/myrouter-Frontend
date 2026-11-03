@@ -14,6 +14,9 @@ import {
   type ProviderSummary,
 } from "@/lib/server-api";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "AI Model Directory — 500+ Frontier AI Models & LLMs | ProRouter",
   description:

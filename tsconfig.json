@@ -27,9 +27,6 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@pro/routing": [
-        "../../packages/routing/src/index.ts"
       ]
     }
   },

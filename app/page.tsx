@@ -6,6 +6,9 @@ import { Footer } from "@/components/Footer";
 import { Badge, CopyButton } from "@/components/ui";
 import { fetchJson, DEFAULT_MODELS } from "@/lib/server-api";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "ProRouter — #1 Unified AI API Gateway & Model Router | 500+ Frontier Models",
   description:

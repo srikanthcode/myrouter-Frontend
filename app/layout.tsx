@@ -18,11 +18,11 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.prorouter.in"),
   title: {
-    default: "ProRouter — #1 Unified AI API Gateway & Model Router | 500+ Models",
+    default: "ProRouter — #1 Unified AI API Gateway & Model Router | 480+ AI Models",
     template: "%s | ProRouter",
   },
   description:
-    "ProRouter is the leading unified AI API provider and model router. Access 500+ frontier models including DeepSeek V4.1, Claude 3.5 Sonnet, Moonshot Kimi K2.7 Code, and OpenAI with one unified API key, one wallet, automatic zero-downtime fallback, and ultra low-latency token streaming.",
+    "ProRouter is the leading unified AI API provider and model router. Access 480+ AI models including DeepSeek V4.1, Claude 3.5 Sonnet, Moonshot Kimi K2.7 Code, and OpenAI with one unified API key, one wallet, automatic zero-downtime fallback, and ultra low-latency token streaming.",
   keywords: [
     "ProRouter",
     "Pro Router",
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ProRouter — #1 Unified AI API Gateway & Model Router",
     description:
-      "One API, one wallet, one dashboard. Route across 500+ AI models including DeepSeek, Claude, Kimi, and OpenAI with zero downtime and automatic fallback.",
+      "One API, one wallet, one dashboard. Route across 480+ AI models including DeepSeek, Claude, Kimi, and OpenAI with zero downtime and automatic fallback.",
     url: "https://www.prorouter.in",
     siteName: "ProRouter",
     locale: "en_US",
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ProRouter — #1 Unified AI API Gateway & Model Router",
     description:
-      "One API, one wallet, one dashboard. Route across 500+ AI models including DeepSeek, Claude, Kimi, and OpenAI.",
+      "One API, one wallet, one dashboard. Route across 480+ AI models including DeepSeek, Claude, Kimi, and OpenAI.",
     images: ["/icon.svg"],
   },
   robots: {
@@ -118,7 +118,7 @@ const organizationJsonLd = {
   url: "https://www.prorouter.in",
   logo: "https://www.prorouter.in/icon.svg",
   description:
-    "ProRouter is the premier unified AI infrastructure platform and model router providing low-latency inference across 500+ frontier AI models.",
+    "ProRouter is the premier unified AI infrastructure platform and model router providing low-latency inference across 480+ AI models.",
   sameAs: ["https://twitter.com/prorouter", "https://github.com/srikanthcode"],
   contactPoint: {
     "@type": "ContactPoint",
@@ -154,7 +154,7 @@ const softwareApplicationJsonLd = {
   },
   featureList: [
     "Unified OpenAI-compatible API endpoint",
-    "500+ Frontier & Open-Weight LLMs (Claude, DeepSeek, Kimi, OpenAI, Qwen)",
+    "480+ AI Models (Claude, DeepSeek, Kimi, OpenAI, Qwen)",
     "Zero-downtime automatic provider failover",
     "Real-time token streaming playground",
     "Unified wallet with transparent INR pricing",

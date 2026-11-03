@@ -8,7 +8,7 @@ import { cx } from "@/lib/api";
 export const metadata: Metadata = {
   title: "ProRouter API Documentation — OpenAI-Compatible API Quickstart & Reference",
   description:
-    "Developer documentation for ProRouter API. One drop-in OpenAI-compatible endpoint for 500+ LLMs. Chat completions, streaming SSE, tool calling, JSON mode, and unified API keys.",
+    "Developer documentation for ProRouter API. One drop-in OpenAI-compatible endpoint for 480+ AI models. Chat completions, streaming SSE, tool calling, JSON mode, and unified API keys.",
   keywords: [
     "ProRouter docs",
     "OpenAI compatible API docs",
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "ProRouter API Documentation — OpenAI-Compatible API Quickstart",
-    description: "One OpenAI-compatible endpoint. Point your existing SDK at ProRouter and access 500+ frontier models.",
+    description: "One OpenAI-compatible endpoint. Point your existing SDK at ProRouter and access 480+ AI models.",
     url: "https://www.prorouter.in/docs",
     siteName: "ProRouter",
     type: "website",

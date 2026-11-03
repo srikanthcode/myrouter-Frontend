@@ -274,7 +274,7 @@ export const DEFAULT_PLANS_USD: PlanSummary[] = [
     concurrency: 2,
     queuePriority: 10,
     features: [
-      "Access to all 500+ frontier models",
+      "Access to all 480+ AI models",
       "Free daily quota on all models",
       "Standard queue priority",
       "Streaming SSE responses",

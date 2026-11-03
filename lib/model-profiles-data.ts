@@ -19557,3 +19557,18 @@ export const MODEL_PROFILES_500: ModelSummary[] = [
     "available": true
   }
 ];
+
+
+export const ALL_MODELS_500: WebModelEntry[] = MODEL_PROFILES_500.map((m) => ({
+  id: m.id,
+  name: m.name,
+  object: "model",
+  created: 1710000000,
+  owned_by: m.providerSlug || "prorouter",
+  category: m.categoryLabel || m.category || "General",
+  description: m.description,
+  pricing: {
+    input_usd_per_million: m.pricing.inputPerMillion > 0 ? Number((m.pricing.inputPerMillion / 80).toFixed(4)) : 0,
+    output_usd_per_million: m.pricing.outputPerMillion > 0 ? Number((m.pricing.outputPerMillion / 80).toFixed(4)) : 0,
+  },
+}));

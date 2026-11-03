@@ -267,7 +267,7 @@ export function PricingContent({
                   <ul className="mt-3 space-y-1.5 text-mut text-[12px]">
                     <li className="flex items-center gap-1.5">
                       <Check className="size-3.5 text-accent shrink-0" />
-                      <span>Valid for all 35+ frontier models</span>
+                      <span>Valid for all 500+ frontier models</span>
                     </li>
                     <li className="flex items-center gap-1.5">
                       <Check className="size-3.5 text-accent shrink-0" />

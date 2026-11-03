@@ -7,9 +7,9 @@ import { Badge, CopyButton } from "@/components/ui";
 import { fetchJson, DEFAULT_MODELS } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "ProRouter — #1 Unified AI API Gateway & Model Router | 35+ Frontier Models",
+  title: "ProRouter — #1 Unified AI API Gateway & Model Router | 500+ Frontier Models",
   description:
-    "ProRouter gives developers one unified, OpenAI-compatible API key and wallet across 35+ frontier AI models (DeepSeek V4.1, Claude 3.5 Sonnet, Kimi K2.7 Code, OpenAI GPT-4o) with smart routing and automatic zero-downtime fallback.",
+    "ProRouter gives developers one unified, OpenAI-compatible API key and wallet across 500+ frontier AI models (DeepSeek V4.1, Claude 3.5 Sonnet, Kimi K2.7 Code, OpenAI GPT-4o) with smart routing and automatic zero-downtime fallback.",
   keywords: [
     "ProRouter",
     "Pro Router",
@@ -65,7 +65,7 @@ for await (const chunk of stream) {
 const faqs = [
   {
     q: "What is ProRouter and why is it the best AI API provider?",
-    a: "ProRouter is the leading unified AI API provider and model router. Instead of managing dozens of provider contracts, separate keys, and fragmented billing, ProRouter gives you a single OpenAI-compatible endpoint for 35+ frontier models (DeepSeek, Claude, Kimi, OpenAI, Alibaba, Google, Mistral) with automatic zero-downtime fallback, single wallet billing in INR (₹), and instant token streaming.",
+    a: "ProRouter is the leading unified AI API provider and model router. Instead of managing dozens of provider contracts, separate keys, and fragmented billing, ProRouter gives you a single OpenAI-compatible endpoint for 500+ frontier models (DeepSeek, Claude, Kimi, OpenAI, Alibaba, Google, Mistral) with automatic zero-downtime fallback, single wallet billing in INR (₹), and instant token streaming.",
   },
   {
     q: "How does ProRouter compare to OpenRouter or individual AI APIs?",
@@ -85,7 +85,7 @@ const faqs = [
   },
   {
     q: "Can I test models before integrating?",
-    a: "Yes! Visit the ProRouter Playground at https://prorouter.in/chat to test and compare 35+ models live in your browser with real-time streaming, latency telemetry, and parameter controls.",
+    a: "Yes! Visit the ProRouter Playground at https://prorouter.in/chat to test and compare 500+ models live in your browser with real-time streaming, latency telemetry, and parameter controls.",
   },
 ];
 
@@ -153,11 +153,11 @@ export default async function LandingPage() {
               One API for the <span className="text-accent">AI ecosystem</span>.
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed text-mut sm:text-base">
-              Stop juggling dozens of API keys. ProRouter gives developers a single OpenAI-compatible endpoint across 35+ frontier models, with smart routing, automatic zero-downtime fallback, unified INR billing, and live telemetry.
+              Stop juggling dozens of API keys. ProRouter gives developers a single OpenAI-compatible endpoint across 500+ frontier models, with smart routing, automatic zero-downtime fallback, unified INR billing, and live telemetry.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link href="/models" className="inline-flex h-11 cursor-pointer items-center rounded-lg bg-accent px-5 text-sm font-medium text-accent-ink transition-colors duration-200 hover:bg-accent2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                Explore 35+ models
+                Explore 500+ models
               </Link>
               <Link href="/signup" className="inline-flex h-11 cursor-pointer items-center rounded-lg border border-line2 bg-white/[0.04] px-5 text-sm font-medium text-fg transition-colors duration-200 hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Get free API key
@@ -174,7 +174,7 @@ export default async function LandingPage() {
           </div>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] text-mut2">
-            {["OpenAI SDK Compatible", "Streaming Token SSE", "Zero-Downtime Fallback", "35+ Frontier LLMs", "INR Wallet (UPI/Cards)", "Sub-200ms Latency"].map((f) => (
+            {["OpenAI SDK Compatible", "Streaming Token SSE", "Zero-Downtime Fallback", "500+ Frontier LLMs", "INR Wallet (UPI/Cards)", "Sub-200ms Latency"].map((f) => (
               <span key={f} className="flex items-center gap-1.5">
                 <span className="size-1 rounded-full bg-accent" aria-hidden="true" />
                 {f}
@@ -237,10 +237,10 @@ export default async function LandingPage() {
             <div>
               <div className="mb-3 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-accent">Model Catalogue</div>
               <h2 className="text-2xl font-semibold tracking-tight">Every model, one endpoint.</h2>
-              <p className="mt-2 max-w-xl text-[14px] text-mut">Explore 35+ frontier models from Moonshot, Anthropic, DeepSeek, OpenAI, Alibaba, and Mistral behind a single reliable endpoint.</p>
+              <p className="mt-2 max-w-xl text-[14px] text-mut">Explore 500+ frontier models from Moonshot, Anthropic, DeepSeek, OpenAI, Alibaba, and Mistral behind a single reliable endpoint.</p>
             </div>
             <Link href="/models" className="group inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-sm font-medium text-accent transition-colors duration-200 hover:text-accent2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-              Browse all 35+ models
+              Browse all 500+ models
               <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden="true" />
             </Link>
           </div>

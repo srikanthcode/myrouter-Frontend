@@ -17,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: "AI Model Directory — 500+ Frontier AI Models & LLMs | ProRouter",
   description:
-    "Explore 47+ unique AI models including Mistral Leanstral, Poolside Laguna, Novita Ling, NVIDIA Nemotron, Google Gemma, DeepSeek, Claude, and OpenAI. Compare real-time token pricing in INR and USD with India localized developer rates.",
+    "Explore 500+ unique AI models including Mistral Leanstral, Novita Ling, NVIDIA Nemotron, Google Gemma, DeepSeek, Claude, and OpenAI. Compare real-time token pricing in INR and USD with India localized developer rates.",
   keywords: [
     "AI models",
     "LLM directory",
@@ -34,9 +34,9 @@ export const metadata: Metadata = {
     canonical: "https://www.prorouter.in/models",
   },
   openGraph: {
-    title: "AI Model Directory — 47+ Frontier LLMs & APIs | ProRouter",
+    title: "AI Model Directory — 500+ Frontier LLMs & APIs | ProRouter",
     description:
-      "Explore 47+ unique frontier AI models with unified API keys and transparent token pricing in INR & USD.",
+      "Explore 500+ unique frontier AI models with unified API keys and transparent token pricing in INR & USD.",
     url: "https://www.prorouter.in/models",
     siteName: "ProRouter",
     type: "website",
@@ -131,7 +131,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
     <PublicShell>
       <PageHeader
         eyebrow="Model catalogue"
-        title="47+ Models. One Universal Endpoint."
+        title="500+ Models. One Universal Endpoint."
         subtitle="Transparent per-million token pricing in INR and USD. Zero latency overhead and intelligent failover."
       >
         <form action="/models" method="get" className="flex max-w-lg gap-2">

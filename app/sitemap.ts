@@ -99,7 +99,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  // Dedicated SEO routes for every single model in the catalogue (34+ models)
+  // Dedicated SEO routes for every single model in the catalogue (500+ models)
   // Ensures Google crawls and ranks individual model queries (e.g. "kimi k2.7 code api", "deepseek v4.1 flash api")
   const modelRoutes: MetadataRoute.Sitemap = DEFAULT_MODELS.map((m) => ({
     url: `${baseUrl}/models/${m.slug}`,

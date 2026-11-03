@@ -92,6 +92,15 @@ export const metadata: Metadata = {
   authors: [{ name: "ProRouter Team", url: "https://www.prorouter.in" }],
   creator: "ProRouter",
   publisher: "ProRouter",
+  verification: {
+    google: "google616b6046b33b1d2d",
+    other: {
+      "google-site-verification": [
+        "google616b6046b33b1d2d",
+        "google616b6046b33b1d2d.html",
+      ],
+    },
+  },
 };
 
 export const viewport: Viewport = {

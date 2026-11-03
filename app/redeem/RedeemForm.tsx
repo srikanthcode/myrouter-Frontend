@@ -51,12 +51,12 @@ export function RedeemForm({ defaultCode }: { defaultCode: string }) {
           <span className="text-[14px] font-semibold text-good">{done.message}</span>
         </div>
         <p className="mt-3 text-[13.5px] leading-relaxed text-mut">
-          Your Astra access is active for {done.entitlement.daysLeft} day{done.entitlement.daysLeft === 1 ? "" : "s"}, expiring on{" "}
+          Your pro access is active for {done.entitlement.daysLeft} day{done.entitlement.daysLeft === 1 ? "" : "s"}, expiring on{" "}
           {new Date(done.entitlement.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
-          <Link href="/dashboard/astra" className={linkPrimary}>
-            Go to Astra
+          <Link href="/dashboard" className={linkPrimary}>
+            Go to dashboard
           </Link>
           <Link href="/chat" className={linkSecondary}>
             Try the playground

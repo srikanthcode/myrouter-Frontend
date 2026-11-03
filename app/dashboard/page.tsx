@@ -102,10 +102,6 @@ export default function DashboardHome() {
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Build with every model through one API.</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge tone={queueReady ? "good" : "warn"}>Free queue: {queueReady ? "Ready" : "Busy"}</Badge>
-            <Badge tone={data.astra?.active ? "accent" : "neutral"}>
-              {data.astra?.active && <Sparkles className="size-3" aria-hidden="true" />}
-              Astra: {data.astra?.active ? `${data.astra?.daysLeft ?? "?"} days remaining` : "not active"}
-            </Badge>
             <Badge tone="neutral">API requests: {(data.month?.requests ?? 0).toLocaleString("en-IN")} this month</Badge>
           </div>
         </div>

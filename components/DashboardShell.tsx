@@ -91,7 +91,6 @@ const nav = [
     { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
     { href: "/pricing", label: "Billing & Plans", icon: CreditCard },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
-    { href: "/dashboard/astra", label: "Astra", icon: Sparkles },
   ]},
   { section: "Account", items: [
     { href: "/dashboard/settings", label: "Settings", icon: Settings },

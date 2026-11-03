@@ -420,10 +420,16 @@ export const DEFAULT_PROVIDERS: ProviderSummary[] = [
   { id: "p-jev", slug: "jev", name: "Jev", region: "global", status: "active", modelCount: 1, uptimePercent: 99.90, avgLatencyMs: 430, priority: 15, supportedCapabilities: ["chat", "synthesis"], retentionPolicy: "zero_retention", description: "Jev multi-step reasoning variant." },
   { id: "p-poolside", slug: "poolside", name: "Poolside", region: "global", status: "active", modelCount: 2, uptimePercent: 99.94, avgLatencyMs: 310, priority: 16, supportedCapabilities: ["chat", "coding"], retentionPolicy: "zero_retention", description: "Poolside specialized software engineering foundation models." },
   { id: "p-novita", slug: "novita", name: "Novita", region: "global", status: "active", modelCount: 2, uptimePercent: 99.93, avgLatencyMs: 270, priority: 17, supportedCapabilities: ["chat", "multilingual", "reasoning"], retentionPolicy: "zero_retention", description: "Novita high-throughput Ling models for edge and conversational workflows." },
-  { id: "p-requesty", slug: "requesty", name: "Requesty AI", region: "global", status: "active", modelCount: 13, uptimePercent: 99.95, avgLatencyMs: 320, priority: 18, supportedCapabilities: ["chat", "reasoning", "coding", "vision"], retentionPolicy: "zero_retention", description: "Requesty AI frontier unified routing gateway." },
+  { id: "p-nabh", slug: "nabh", name: "Nabh Cloud", region: "global", status: "active", modelCount: 1, uptimePercent: 99.96, avgLatencyMs: 310, priority: 19, supportedCapabilities: ["chat", "reasoning", "coding"], retentionPolicy: "zero_retention", description: "Nabh Cloud high-throughput AI gateway." },
+  { id: "p-groq", slug: "groq", name: "Groq", region: "us", status: "active", modelCount: 4, uptimePercent: 99.98, avgLatencyMs: 180, priority: 8, supportedCapabilities: ["chat", "fast", "reasoning"], retentionPolicy: "zero_retention", description: "Groq LPU ultra-high throughput inference engine." },
+  { id: "p-openrouter", slug: "openrouter", name: "OpenRouter", region: "global", status: "active", modelCount: 4, uptimePercent: 99.95, avgLatencyMs: 380, priority: 9, supportedCapabilities: ["chat", "vision", "reasoning"], retentionPolicy: "zero_retention", description: "OpenRouter aggregated multi-provider gateway." },
+  { id: "p-requesty", slug: "requesty", name: "Requesty AI", region: "global", status: "active", modelCount: 6, uptimePercent: 99.95, avgLatencyMs: 320, priority: 18, supportedCapabilities: ["chat", "reasoning", "coding", "vision"], retentionPolicy: "zero_retention", description: "Requesty AI frontier unified routing gateway." },
 ];
 
+import { MODEL_PROFILES_500 } from "./model-profiles-data";
+
 export const DEFAULT_MODELS: ModelSummary[] = [
+  ...MODEL_PROFILES_500,
   // ── 1. Anthropic Claude 3.5 Sonnet ──
   {
     id: "m-claude-sonnet",
@@ -1192,70 +1198,7 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     latencyMs: 320,
     available: true,
   },
-  // ── 36. Poolside Laguna XS.2 ──
-  {
-    id: "m-laguna-xs-2",
-    slug: "laguna-xs.2",
-    name: "Laguna XS.2",
-    description: "Poolside Laguna XS.2 — specialized ultra-fast coding and execution model designed for rapid software iteration and inline completions.",
-    providerName: "Poolside",
-    providerSlug: "poolside",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 32768,
-    maxOutputTokens: 16384,
-    rank: 36,
-    popularity: 9850,
-    rating: 95,
-    latencyMs: 290,
-    available: true,
-  },
-  // ── 37. Poolside Laguna M.1 ──
-  {
-    id: "m-laguna-m-1",
-    slug: "laguna-m.1",
-    name: "Laguna M.1",
-    description: "Poolside Laguna M.1 — medium-tier frontier code synthesis, repository navigation, and multi-file refactoring engine.",
-    providerName: "Poolside",
-    providerSlug: "poolside",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 32768,
-    maxOutputTokens: 16384,
-    rank: 37,
-    popularity: 9855,
-    rating: 95,
-    latencyMs: 340,
-    available: true,
-  },
-  // ── 38. Novita InclusionAI Ling 3.0 Tiny ──
-  {
-    id: "m-ling-3-0-tiny",
-    slug: "inclusionai/ling-3.0-tiny",
-    name: "Ling 3.0 Tiny",
-    description: "Novita InclusionAI Ling 3.0 Tiny — lightweight multilingual model with 262K context for edge inference and compact reasoning.",
-    providerName: "Novita",
-    providerSlug: "novita",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 262144,
-    maxOutputTokens: 32768,
-    rank: 38,
-    popularity: 9840,
-    rating: 94,
-    latencyMs: 260,
-    available: true,
-  },
-  // ── 39. Novita Ling 3.1 Flash ──
+  // ── 36. Novita Ling 3.1 Flash ──
   {
     id: "m-ling-3-1-flash",
     slug: "ling-3.1-flash",
@@ -1270,34 +1213,13 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 262144,
     maxOutputTokens: 32768,
-    rank: 39,
+    rank: 36,
     popularity: 9865,
     rating: 95,
     latencyMs: 240,
     available: true,
   },
-  // ── 40. NVIDIA Nemotron 3 Nano 30B A3B ──
-  {
-    id: "m-nemotron-3-nano-30b-a3b",
-    slug: "nemotron-3-nano-30b-a3b",
-    name: "Nemotron 3 Nano 30B A3B",
-    description: "NVIDIA Nemotron 3 Nano 30B A3B — efficient MoE architecture delivering enterprise reasoning and 262K context.",
-    providerName: "NVIDIA",
-    providerSlug: "nvidia",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 262144,
-    maxOutputTokens: 32768,
-    rank: 40,
-    popularity: 9870,
-    rating: 96,
-    latencyMs: 310,
-    available: true,
-  },
-  // ── 41. NVIDIA Nemotron 3 Nano Omni 30B Reasoning ──
+  // ── 37. NVIDIA Nemotron 3 Nano Omni 30B Reasoning ──
   {
     id: "m-nemotron-3-nano-omni-30b-a3b-reasoning",
     slug: "nemotron-3-nano-omni-30b-a3b-reasoning",
@@ -1312,55 +1234,13 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 131072,
     maxOutputTokens: 20480,
-    rank: 41,
+    rank: 37,
     popularity: 9880,
     rating: 97,
     latencyMs: 420,
     available: true,
   },
-  // ── 42. NVIDIA Nemotron 3 Super 120B A12B ──
-  {
-    id: "m-nemotron-3-super-120b-a12b",
-    slug: "nemotron-3-super-120b-a12b",
-    name: "Nemotron 3 Super 120B A12B",
-    description: "NVIDIA Nemotron 3 Super 120B A12B — massive 1M context MoE flagship for whole-codebase understanding and deep synthesis.",
-    providerName: "NVIDIA",
-    providerSlug: "nvidia",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    rank: 42,
-    popularity: 9890,
-    rating: 98,
-    latencyMs: 490,
-    available: true,
-  },
-  // ── 43. NVIDIA Nemotron 3.5 Content Safety ──
-  {
-    id: "m-nemotron-3-5-content-safety",
-    slug: "nemotron-3.5-content-safety",
-    name: "Nemotron 3.5 Content Safety",
-    description: "NVIDIA Nemotron 3.5 Content Safety — specialized guardrail model for real-time moderation, compliance, and safety filtering across 131K context.",
-    providerName: "NVIDIA",
-    providerSlug: "nvidia",
-    type: "chat",
-    status: "active",
-    isFree: true,
-    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
-    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
-    contextWindow: 131072,
-    maxOutputTokens: 8192,
-    rank: 43,
-    popularity: 9830,
-    rating: 94,
-    latencyMs: 180,
-    available: true,
-  },
-  // ── 44. NVIDIA Nemotron 3.5 Lightning 30B A3B ──
+  // ── 38. NVIDIA Nemotron 3.5 Lightning 30B A3B ──
   {
     id: "m-nemotron-3-5-lightning-30b-a3b",
     slug: "nemotron-3.5-lightning-30b-a3b",
@@ -1375,13 +1255,13 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 1048576,
     maxOutputTokens: 65536,
-    rank: 44,
+    rank: 38,
     popularity: 9910,
     rating: 98,
     latencyMs: 250,
     available: true,
   },
-  // ── 45. NVIDIA Nemotron 3 Ultra 550B A55B ──
+  // ── 39. NVIDIA Nemotron 3 Ultra 550B A55B ──
   {
     id: "m-nemotron-3-ultra-550b-a55b",
     slug: "nemotron-3-ultra-550b-a55b",
@@ -1396,34 +1276,93 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 1048576,
     maxOutputTokens: 65536,
-    rank: 45,
+    rank: 39,
     popularity: 9940,
     rating: 99,
     latencyMs: 550,
     available: true,
   },
-  // ── 46. NVIDIA Muse Glimmer 30B ──
+  // ── 40. Google Gemma 4 31B IT ──
   {
-    id: "m-muse-glimmer-30b",
-    slug: "muse-glimmer-30b",
-    name: "Muse Glimmer 30B",
-    description: "NVIDIA Muse Glimmer 30B — creative reasoning and expressive generation model tuned for narrative design, code styling, and 131K context.",
-    providerName: "NVIDIA",
-    providerSlug: "nvidia",
+    id: "m-gpt-oss-120b",
+    slug: "gpt-oss-120b",
+    name: "GPT OSS 120B",
+    description: "OpenAI open-weight 120B parameter MoE reasoning architecture with high throughput on Groq LPU.",
+    providerName: "Groq",
+    providerSlug: "groq",
     type: "chat",
     status: "active",
     isFree: true,
     pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 131072,
-    maxOutputTokens: 20480,
-    rank: 46,
-    popularity: 9835,
-    rating: 95,
-    latencyMs: 340,
+    maxOutputTokens: 32768,
+    rank: 42,
+    popularity: 9800,
+    rating: 98,
+    latencyMs: 190,
     available: true,
   },
-  // ── 47. Google Gemma 4 31B IT ──
+  {
+    id: "m-qwen-qwen3.8-27b",
+    slug: "qwen/qwen3.8-27b",
+    name: "Qwen 3.8 27B",
+    description: "Alibaba Qwen3.8 27B — high-performance open-weight model with strong multilingual and reasoning abilities running on Groq LPU.",
+    providerName: "Groq",
+    providerSlug: "groq",
+    type: "chat",
+    status: "active",
+    isFree: true,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 131072,
+    maxOutputTokens: 64000,
+    rank: 44,
+    popularity: 9860,
+    rating: 98,
+    latencyMs: 180,
+    available: true,
+  },
+  {
+    id: "m-allam-2-7b",
+    slug: "allam-2-7b",
+    name: "Allam 2 7B",
+    description: "SDAIA high-performance bilingual Arabic & English foundational language model running on Groq LPU.",
+    providerName: "Groq",
+    providerSlug: "groq",
+    type: "chat",
+    status: "active",
+    isFree: true,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+    capabilities: { modalities: ["text"], streaming: true, toolCalls: false, structuredOutputs: true, reasoning: false, vision: false, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 4096,
+    maxOutputTokens: 2048,
+    rank: 43,
+    popularity: 9100,
+    rating: 91,
+    latencyMs: 160,
+    available: true,
+  },
+  {
+    id: "m-gpt-oss-20b",
+    slug: "gpt-oss-20b",
+    name: "GPT OSS 20B",
+    description: "Open-weight 20B parameter reasoning and chat model with high speed and chain-of-thought capabilities.",
+    providerName: "Nabh Cloud",
+    providerSlug: "nabh",
+    type: "chat",
+    status: "active",
+    isFree: true,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0, currency: "INR" },
+    capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: false, imageGeneration: false, audio: false, jsonMode: true },
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    rank: 41,
+    popularity: 9750,
+    rating: 97,
+    latencyMs: 300,
+    available: true,
+  },
   {
     id: "m-gemma-4-31b-it",
     slug: "gemma-4-31b-it",
@@ -1438,7 +1377,7 @@ export const DEFAULT_MODELS: ModelSummary[] = [
     capabilities: { modalities: ["text"], streaming: true, toolCalls: true, structuredOutputs: true, reasoning: true, vision: true, imageGeneration: false, audio: false, jsonMode: true },
     contextWindow: 262144,
     maxOutputTokens: 8192,
-    rank: 47,
+    rank: 40,
     popularity: 9920,
     rating: 98,
     latencyMs: 310,
@@ -1485,14 +1424,31 @@ export function getFilteredDefaultModels(filters: {
           m.slug.includes("code") ||
           m.slug.includes("devstral") ||
           m.description.toLowerCase().includes("code") ||
-          m.description.toLowerCase().includes("coding"),
+          m.description.toLowerCase().includes("coding") ||
+          m.capabilities.toolCalls,
       );
     } else if (cat === "reasoning") {
-      list = list.filter((m) => m.capabilities.reasoning);
+      list = list.filter((m) => m.capabilities.reasoning || m.slug.includes("reason") || m.description.toLowerCase().includes("reason"));
     } else if (cat === "vision") {
-      list = list.filter((m) => m.capabilities.vision);
-    } else if (cat === "tools") {
-      list = list.filter((m) => m.capabilities.toolCalls);
+      list = list.filter((m) => m.capabilities.vision || m.slug.includes("vision") || m.slug.includes("vl"));
+    } else if (cat === "tools" || cat === "agentic") {
+      list = list.filter((m) => m.capabilities.toolCalls || m.slug.includes("agent") || m.slug.includes("tool"));
+    } else if (cat === "general") {
+      list = list.filter((m) => m.slug.includes("general") || m.slug.includes("assistant") || m.description.toLowerCase().includes("general"));
+    } else if (cat === "research") {
+      list = list.filter((m) => m.slug.includes("research") || m.slug.includes("scholar") || m.slug.includes("analysis") || m.description.toLowerCase().includes("research"));
+    } else if (cat === "math_science" || cat === "math") {
+      list = list.filter((m) => m.slug.includes("math") || m.slug.includes("science") || m.description.toLowerCase().includes("math"));
+    } else if (cat === "multilingual") {
+      list = list.filter((m) => m.slug.includes("multilingual") || m.slug.includes("indic") || m.slug.includes("polyglot") || m.slug.includes("allam"));
+    } else if (cat === "fast") {
+      list = list.filter((m) => m.slug.includes("fast") || m.slug.includes("speed") || m.slug.includes("flash") || m.slug.includes("turbo"));
+    } else if (cat === "long_context" || cat === "long-context") {
+      list = list.filter((m) => m.contextWindow >= 131072 || m.slug.includes("long") || m.slug.includes("context"));
+    } else if (cat === "creative") {
+      list = list.filter((m) => m.slug.includes("creative") || m.slug.includes("writer") || m.slug.includes("author") || m.description.toLowerCase().includes("creative"));
+    } else if (cat === "business") {
+      list = list.filter((m) => m.slug.includes("business") || m.slug.includes("enterprise") || m.slug.includes("executive") || m.description.toLowerCase().includes("business"));
     }
   }
 

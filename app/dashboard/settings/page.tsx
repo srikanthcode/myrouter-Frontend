@@ -91,15 +91,6 @@ export default function SettingsPage() {
               <dd className="mt-1 font-mono text-[13px] tabular-nums">{formatINR(me.balancePaise)}</dd>
             </div>
           </dl>
-          <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-            <Badge tone={me.astra.active ? "good" : "neutral"}>Astra: {me.astra.active ? "active" : "not active"}</Badge>
-            {me.astra.active && me.astra.expiresAt && (
-              <span className="text-[12.5px] text-mut">expires {new Date(me.astra.expiresAt).toLocaleDateString()}</span>
-            )}
-            <Link href="/dashboard/astra" className="inline-flex items-center gap-1.5 text-[12.5px] text-accent transition-colors duration-200 hover:text-accent2">
-              Manage Astra <ArrowRight className="size-3.5" aria-hidden="true" />
-            </Link>
-          </div>
         </div>
       </Card>
 

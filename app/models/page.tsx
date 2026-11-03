@@ -15,7 +15,7 @@ import {
 } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  title: "AI Model Directory — 47+ Frontier LLMs & APIs | ProRouter",
+  title: "AI Model Directory — 500+ Frontier AI Models & LLMs | ProRouter",
   description:
     "Explore 47+ unique AI models including Mistral Leanstral, Poolside Laguna, Novita Ling, NVIDIA Nemotron, Google Gemma, DeepSeek, Claude, and OpenAI. Compare real-time token pricing in INR and USD with India localized developer rates.",
   keywords: [
@@ -50,11 +50,19 @@ function one(v: string | string[] | undefined): string | undefined {
 }
 
 const categories = [
-  { key: "", label: "All" },
-  { key: "coding", label: "Coding" },
+  { key: "", label: "All Models (500+)" },
+  { key: "general", label: "General" },
   { key: "reasoning", label: "Reasoning" },
-  { key: "vision", label: "Vision" },
-  { key: "tools", label: "Tool use" },
+  { key: "coding", label: "Coding" },
+  { key: "agentic", label: "Agentic & Tools" },
+  { key: "research", label: "Research" },
+  { key: "math_science", label: "Math & Science" },
+  { key: "multilingual", label: "Multilingual & Indic" },
+  { key: "vision", label: "Vision & Docs" },
+  { key: "fast", label: "Fast Response" },
+  { key: "long_context", label: "Long Context" },
+  { key: "creative", label: "Creative Writing" },
+  { key: "business", label: "Business" },
 ];
 
 const sorts: Array<{ key: string; label: string; dir?: "asc" | "desc" }> = [
@@ -100,7 +108,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
   if (free) params.set("free", free);
   if (category) params.set("category", category);
   if (sort) params.set("sort", sort);
-  params.set("limit", "120");
+  params.set("limit", "600");
 
   const [modelsRes, providersRes] = await Promise.all([
     fetchJson<{ items: ModelSummary[]; total: number }>(`/models?${params.toString()}`),

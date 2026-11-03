@@ -46,7 +46,7 @@ export default function ReferralsPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Referrals</h1>
         <p className="mt-1 text-[13.5px] text-mut">
-          Share your code — when someone redeems it they get {data.trialDays} days of Astra access, and you can track it here.
+          Share your code — when someone redeems it they get {data.trialDays} days of pro access, and you can track it here.
         </p>
       </div>
 
@@ -60,7 +60,7 @@ export default function ReferralsPage() {
         </Card>
         <Card className="p-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[11.5px] uppercase tracking-wide text-mut2">Active Astra users from your code</div>
+            <div className="text-[11.5px] uppercase tracking-wide text-mut2">Active referred users from your code</div>
             <Sparkles className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums">{data.activeAstraUsers}</div>
@@ -90,7 +90,7 @@ export default function ReferralsPage() {
 
         <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5">
           <a
-            href={`https://wa.me/?text=${encodeURIComponent(`Try ProRouter — one API for every AI model. Use my code ${data.code} for ${data.trialDays} days of Astra access: ${shareUrl}`)}`}
+            href={`https://wa.me/?text=${encodeURIComponent(`Try ProRouter — one API for every AI model. Use my code ${data.code} for ${data.trialDays} days of pro access: ${shareUrl}`)}`}
             target="_blank"
             rel="noreferrer"
             className={linkButtonSecondary}
@@ -98,16 +98,13 @@ export default function ReferralsPage() {
             Share on WhatsApp
           </a>
           <a
-            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`One API for every AI model. Use my code ${data.code} for ${data.trialDays} days of Astra access:`)}&url=${encodeURIComponent(shareUrl)}`}
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`One API for every AI model. Use my code ${data.code} for ${data.trialDays} days of pro access:`)}&url=${encodeURIComponent(shareUrl)}`}
             target="_blank"
             rel="noreferrer"
             className={linkButtonSecondary}
           >
             Share on X
           </a>
-          <Link href="/dashboard/astra" className={linkButtonSecondary}>
-            Astra status
-          </Link>
         </div>
       </Card>
 
@@ -116,7 +113,7 @@ export default function ReferralsPage() {
         <ul className="mt-3 space-y-2 text-[13px] text-mut">
           {[
             "Your code is personal to your account and can be shared with anyone.",
-            "A friend opens your share link and redeems the code to activate their Astra trial.",
+            "A friend opens your share link and redeems the code to activate their pro trial.",
             "You cannot redeem your own code — the check happens server-side, so it cannot be spoofed from the browser.",
             "Each account can redeem a given code once, and redemptions are recorded in an immutable log.",
           ].map((item) => (

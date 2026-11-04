@@ -1,3 +1,12 @@
+// ── Free Playground Request Rate Limiter (10 free requests per IP/user) ──
+interface PlaygroundIpUsage {
+  count: number;
+  lastReset: number;
+}
+const freePlaygroundIpUsage = new Map<string, PlaygroundIpUsage>();
+const FREE_PLAYGROUND_LIMIT = 10;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -1103,6 +1112,38 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
   // ── 3. POST /v1/chat/completions ──
   if (subpath === "chat/completions" && req.method === "POST") {
+    // Check Free Playground limit (10 requests per user/IP for free users; Pay-As-You-Go users unlimited)
+    const authHeader = req.headers.get("authorization") || "";
+    const clientKey = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const isDefaultPlaygroundKey = !clientKey || clientKey === "pro_sk_live_playground_default";
+
+    if (isDefaultPlaygroundKey) {
+      const forwarded = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+      const clientIp = forwarded.split(",")[0].trim();
+      const now = Date.now();
+      let usage = freePlaygroundIpUsage.get(clientIp);
+      if (!usage || (now - usage.lastReset) > ONE_DAY_MS) {
+        usage = { count: 0, lastReset: now };
+        freePlaygroundIpUsage.set(clientIp, usage);
+      }
+
+      if (usage.count >= FREE_PLAYGROUND_LIMIT) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "free_playground_limit_reached",
+              message: "Free playground limit reached (" + FREE_PLAYGROUND_LIMIT + "/" + FREE_PLAYGROUND_LIMIT + " requests used). Please sign in and activate Pay-As-You-Go at https://www.prorouter.in/dashboard/billing to continue testing 500+ models with unlimited access.",
+              limit: FREE_PLAYGROUND_LIMIT,
+              used: usage.count,
+            },
+          },
+          { status: 402, headers: CORS_HEADERS }
+        );
+      }
+
+      usage.count += 1;
+    }
+
     let payload: Record<string, unknown> = {};
     try {
       payload = await req.json();

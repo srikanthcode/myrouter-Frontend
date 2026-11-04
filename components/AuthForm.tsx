@@ -2,10 +2,27 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Eye, EyeOff, TriangleAlert } from "lucide-react";
+import { Eye, EyeOff, TriangleAlert, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button, IconButton, Input, useToast } from "./ui";
 import { Logo } from "./Logo";
+
+export function validateGmail(email: string): string | null {
+  const trimmed = (email || "").trim().toLowerCase();
+  if (!trimmed) return "Please enter your Gmail address.";
+  if (trimmed.includes("+")) {
+    return "Google email aliases (+alias) are not allowed. Please enter your direct Google @gmail.com address.";
+  }
+  if (!trimmed.endsWith("@gmail.com")) {
+    return "Only official Google Gmail accounts (@gmail.com) are allowed. Temporary or disposable emails are strictly blocked.";
+  }
+  const username = trimmed.slice(0, trimmed.length - "@gmail.com".length);
+  const gmailRegex = /^[a-z0-9](?!.*\.\.)[a-z0-9.]{4,28}[a-z0-9]$/;
+  if (!gmailRegex.test(username)) {
+    return "Invalid Gmail username. Google accounts must be 6 to 30 characters (letters and numbers, e.g. username@gmail.com).";
+  }
+  return null;
+}
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -20,13 +37,21 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const gmailError = validateGmail(email);
+    if (gmailError) {
+      setError(gmailError);
+      return;
+    }
+
     setLoading(true);
     try {
+      const cleanEmail = email.trim().toLowerCase();
       if (mode === "signup") {
-        await api("/auth/register", { method: "POST", body: { email, password, name: name || undefined } });
+        await api("/auth/register", { method: "POST", body: { email: cleanEmail, password, name: name || undefined } });
         toast.push("Account created — welcome to ProRouter!", "success");
       } else {
-        await api("/auth/login", { method: "POST", body: { email, password } });
+        await api("/auth/login", { method: "POST", body: { email: cleanEmail, password } });
         toast.push("Signed in successfully.", "success");
       }
       router.push("/dashboard");
@@ -47,9 +72,27 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <div className="rounded-2xl border border-line bg-panel p-6 shadow-xl sm:p-7">
           <h1 className="text-lg font-semibold tracking-tight">{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
           <p className="mt-1 text-[13px] text-mut">{mode === "signup" ? "One API. Every Model. Free to start." : "Sign in to your ProRouter dashboard."}</p>
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            {mode === "signup" && <Input label="Name" placeholder="Ada Lovelace" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
-            <Input label="Email" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-xs text-mut">
+            <ShieldCheck className="size-4 shrink-0 text-accent" />
+            <span>Strict Security: Only verified Google Gmail accounts allowed. No temp mails or aliases.</span>
+          </div>
+
+          <form onSubmit={submit} className="mt-5 space-y-4">
+            {mode === "signup" && <Input label="Name" placeholder="Your Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
+            <Input
+              label="Google Gmail ID"
+              type="email"
+              placeholder="example@gmail.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(null);
+              }}
+              required
+              autoComplete="email"
+              hint="Only official @gmail.com accounts permitted."
+            />
             <Input
               label="Password"
               type={showPassword ? "text" : "password"}
@@ -68,7 +111,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             {error && (
               <div className="flex items-start gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2.5 text-[13px] text-bad" role="alert">
                 <TriangleAlert className="mt-px size-4 shrink-0" aria-hidden="true" />
-                {error}
+                <span>{error}</span>
               </div>
             )}
             <Button type="submit" className="w-full" loading={loading}>

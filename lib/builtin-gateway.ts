@@ -1,4 +1,15 @@
 
+export function isValidGmail(email: string): boolean {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim().toLowerCase();
+  if (trimmed.includes("+")) return false;
+  if (!trimmed.endsWith("@gmail.com")) return false;
+  const username = trimmed.slice(0, trimmed.length - "@gmail.com".length);
+  const gmailRegex = /^[a-z0-9](?!.*\.\.)[a-z0-9.]{4,28}[a-z0-9]$/;
+  return gmailRegex.test(username);
+}
+
+
 interface FallbackTx {
   id: string;
   type: string;
@@ -92,8 +103,8 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     }
     const email = (body.email || "").trim().toLowerCase();
     const name = (body.name || "").trim() || email.split("@")[0] || "User";
-    if (!email || !email.includes("@")) {
-      return NextResponse.json({ error: { code: "invalid_request", message: "A valid email address is required." } }, { status: 400 });
+    if (!isValidGmail(email)) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
     const user = {
       id: "usr_" + Math.random().toString(36).slice(2, 10),
@@ -123,8 +134,8 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       body = {};
     }
     const email = (body.email || "").trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-      return NextResponse.json({ error: { code: "invalid_request", message: "A valid email address is required." } }, { status: 400 });
+    if (!isValidGmail(email)) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
     const user = {
       id: "usr_" + Math.random().toString(36).slice(2, 10),

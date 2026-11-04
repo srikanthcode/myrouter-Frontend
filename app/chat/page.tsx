@@ -14,6 +14,8 @@ import {
   ChevronDown,
   Info,
   Search,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import { PublicNav } from "@/components/PublicNav";
 import { Badge, Button, useToast } from "@/components/ui";
@@ -269,6 +271,48 @@ export default function ChatPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"model" | "telemetry" | "curl">("model");
 
+  // Free Tier vs Pay-As-You-Go Rate Limiting
+  const FREE_LIMIT = 10;
+  const [freeUsed, setFreeUsed] = useState<number>(0);
+  const [userSession, setUserSession] = useState<{
+    user?: any;
+    balancePaise?: number;
+    plan?: { slug: string; name: string };
+  } | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Check local storage for free requests used
+    try {
+      const stored = window.localStorage.getItem("prorouter_free_requests_used");
+      if (stored !== null) {
+        const parsed = parseInt(stored, 10);
+        if (!isNaN(parsed)) setFreeUsed(parsed);
+      }
+    } catch {}
+
+    // Check user session and balance to identify Pay-As-You-Go users
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setUserSession(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const isPayAsYouGo = useMemo(() => {
+    // 1. User has positive wallet balance
+    if (userSession?.balancePaise && userSession.balancePaise > 0) return true;
+    // 2. User is on a paid plan
+    if (userSession?.plan?.slug && userSession.plan.slug !== "free") return true;
+    // 3. User entered their own live API key (not the default guest key)
+    const key = apiKey.trim();
+    if (key && key !== "pro_sk_live_playground_default") return true;
+    return false;
+  }, [userSession, apiKey]);
+
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -340,6 +384,13 @@ export default function ChatPage() {
       if (!text || streaming) return;
 
       const keyToUse = apiKey.trim() || "pro_sk_live_playground_default";
+
+      // Enforce 10-request limit for free users
+      if (!isPayAsYouGo && freeUsed >= FREE_LIMIT) {
+        setShowUpgradeModal(true);
+        setError(`Free playground limit reached (${FREE_LIMIT}/${FREE_LIMIT} requests used). Activate Pay-As-You-Go to continue.`);
+        return;
+      }
 
       setError(null);
       const userMsg: ChatMessage = {

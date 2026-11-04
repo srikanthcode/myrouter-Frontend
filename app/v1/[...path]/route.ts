@@ -90,8 +90,15 @@ export function getNextGatewayKey(): string | null {
   return [...keys].sort((a, b) => (cooldownMap.get(a) || 0) - (cooldownMap.get(b) || 0))[0];
 }
 
-export function markGatewayCooldown(key: string, durationMs = 30_000) {
+export function markGatewayCooldown(key: string, durationMs = 60_000) {
   cooldownMap.set(key, Date.now() + durationMs);
+}
+
+export function isGatewayAvailable(): boolean {
+  const keys = getGatewayKeyPool();
+  if (keys.length === 0) return false;
+  const now = Date.now();
+  return keys.some((k) => (cooldownMap.get(k) || 0) <= now);
 }
 
 export async function fetchGatewayWithRetry(
@@ -1068,189 +1075,197 @@ async function streamGateway(
     }
   }, 2000);
 
+  const isDeepSeek = requestedRawModel.toLowerCase().includes("deepseek");
+  const hasTools = Array.isArray(payload.tools) && payload.tools.length > 0;
+
   // ── Engine 1: TokenJuice AI Gateway (Primary Engine with DeepSeek model) ──
-  try {
-    const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
-    const upstreamBody = {
-      ...payload,
-      messages: effectiveMessages,
-      model: GATEWAY_MODEL, // deepseek-ai/DeepSeek-V4.1-Flash-1017
-      stream: true,
-    };
+  if (isGatewayAvailable()) {
+    try {
+      const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+      const upstreamBody = {
+        ...payload,
+        messages: effectiveMessages,
+        model: GATEWAY_MODEL, // deepseek-ai/DeepSeek-V4.1-Flash-1017
+        stream: true,
+      };
 
-    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(3000));
-    if (upstreamRes.ok && upstreamRes.body) {
-      clearInterval(pingInterval);
-      const reader = upstreamRes.body.getReader();
-      let buffer = "";
-      const processor = new StreamChunkProcessor();
+      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(2500));
+      if (upstreamRes.ok && upstreamRes.body) {
+        clearInterval(pingInterval);
+        const reader = upstreamRes.body.getReader();
+        let buffer = "";
+        const processor = new StreamChunkProcessor();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          if (trimmed === "data: [DONE]") {
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            continue;
-          }
-          try {
-            const parsed = JSON.parse(trimmed.slice(5).trim());
-            if (parsed.model) parsed.model = requestedRawModel;
-            const delta = parsed.choices?.[0]?.delta;
-            const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
-
-            const chunkDelta: Record<string, unknown> = {};
-            if (processed.content !== undefined) chunkDelta.content = processed.content;
-            if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
-
-            if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            if (trimmed === "data: [DONE]") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               continue;
             }
-            if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-              if (parsed.choices[0].finish_reason !== "tool_calls") {
-                chunkDelta.content = "";
-              }
-            }
+            try {
+              const parsed = JSON.parse(trimmed.slice(5).trim());
+              if (parsed.model) parsed.model = requestedRawModel;
+              const delta = parsed.choices?.[0]?.delta;
+              const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-            emittedTokensCount++;
-            const chunk = {
-              id: reqId,
-              object: "chat.completion.chunk",
-              created: createdTimestamp,
-              model: requestedRawModel,
-              choices: [
-                {
-                  index: 0,
-                  delta: chunkDelta,
-                  finish_reason: parsed.choices?.[0]?.finish_reason || null,
-                },
-              ],
-            };
-            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch { }
+              const chunkDelta: Record<string, unknown> = {};
+              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+
+              if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+                continue;
+              }
+              if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+                if (parsed.choices[0].finish_reason !== "tool_calls") {
+                  chunkDelta.content = "";
+                }
+              }
+
+              emittedTokensCount++;
+              const chunk = {
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: chunkDelta,
+                    finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                  },
+                ],
+              };
+              controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+            } catch { }
+          }
         }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        recordTelemetryRequest({
+          model: requestedRawModel,
+          totalTokens: Math.max(30, emittedTokensCount),
+          latencyMs: Date.now() - streamStartTime,
+          status: "success",
+          apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+        });
+        controller.close();
+        return;
       }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      recordTelemetryRequest({
-        model: requestedRawModel,
-        totalTokens: Math.max(30, emittedTokensCount),
-        latencyMs: Date.now() - streamStartTime,
-        status: "success",
-        apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
-      });
-      controller.close();
-      return;
+    } catch (tjErr) {
+      // If TokenJuice is slow or busy, seamlessly fall back to secondary high-speed clusters
     }
-  } catch (tjErr) {
-    // If TokenJuice is slow or busy, seamlessly fall back to Requesty or Edge Cluster
   }
 
   // ── Engine 1B: Requesty High-Performance Gateway (Active Verified Key) ──
-  try {
-    const reqKey = REQUESTY_FALLBACK_KEYS[0];
-    let reqModel = requestedRawModel;
-    if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
-      reqModel = "mistral/leanstral-1-5";
-    } else if (requestedRawModel.includes("ling")) {
-      reqModel = "novita/ling-3.1-flash";
-    } else if (!reqModel.includes("/")) {
-      reqModel = "mistral/leanstral-1-5";
-    }
+  // Do not route DeepSeek or tool-calling coding agents to Leanstral on Requesty
+  if (!isDeepSeek && !hasTools) {
+    try {
+      const reqKey = REQUESTY_FALLBACK_KEYS[0];
+      let reqModel = requestedRawModel;
+      if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
+        reqModel = "mistral/leanstral-1-5";
+      } else if (requestedRawModel.includes("ling")) {
+        reqModel = "novita/ling-3.1-flash";
+      } else if (!reqModel.includes("/")) {
+        reqModel = "mistral/leanstral-1-5";
+      }
 
-    const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + reqKey,
-      },
-      body: JSON.stringify({
-        ...payload,
-        messages: effectiveMessages,
-        model: reqModel,
-        stream: true,
-      }),
-      signal: AbortSignal.timeout(6000),
-    });
+      const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + reqKey,
+        },
+        body: JSON.stringify({
+          ...payload,
+          messages: effectiveMessages,
+          model: reqModel,
+          stream: true,
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
 
-    if (reqRes.ok && reqRes.body) {
-      clearInterval(pingInterval);
-      const reader = reqRes.body.getReader();
-      let buffer = "";
-      const processor = new StreamChunkProcessor();
+      if (reqRes.ok && reqRes.body) {
+        clearInterval(pingInterval);
+        const reader = reqRes.body.getReader();
+        let buffer = "";
+        const processor = new StreamChunkProcessor();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          if (trimmed === "data: [DONE]") {
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            continue;
-          }
-          try {
-            const parsed = JSON.parse(trimmed.slice(5).trim());
-            const delta = parsed.choices?.[0]?.delta;
-            const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
-
-            const chunkDelta: Record<string, unknown> = {};
-            if (processed.content !== undefined) chunkDelta.content = processed.content;
-            if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
-
-            if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            if (trimmed === "data: [DONE]") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               continue;
             }
-            if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-              if (parsed.choices[0].finish_reason !== "tool_calls") {
-                chunkDelta.content = "";
-              }
-            }
+            try {
+              const parsed = JSON.parse(trimmed.slice(5).trim());
+              const delta = parsed.choices?.[0]?.delta;
+              const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-            emittedTokensCount++;
-            const chunk = {
-              id: reqId,
-              object: "chat.completion.chunk",
-              created: createdTimestamp,
-              model: requestedRawModel,
-              choices: [
-                {
-                  index: 0,
-                  delta: chunkDelta,
-                  finish_reason: parsed.choices?.[0]?.finish_reason || null,
-                },
-              ],
-            };
-            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch { }
+              const chunkDelta: Record<string, unknown> = {};
+              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+
+              if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+                continue;
+              }
+              if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+                if (parsed.choices[0].finish_reason !== "tool_calls") {
+                  chunkDelta.content = "";
+                }
+              }
+
+              emittedTokensCount++;
+              const chunk = {
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: chunkDelta,
+                    finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                  },
+                ],
+              };
+              controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+            } catch { }
+          }
         }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        recordTelemetryRequest({
+          model: requestedRawModel,
+          totalTokens: Math.max(30, emittedTokensCount),
+          latencyMs: Date.now() - streamStartTime,
+          status: "success",
+          apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+        });
+        controller.close();
+        return;
       }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      recordTelemetryRequest({
-        model: requestedRawModel,
-        totalTokens: Math.max(30, emittedTokensCount),
-        latencyMs: Date.now() - streamStartTime,
-        status: "success",
-        apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
-      });
-      controller.close();
-      return;
+    } catch (reqErr) {
+      // Continue to fallback clusters
     }
-  } catch (reqErr) {
-    // Continue to fallback clusters
   }
 
   // ── Engine 2: High-Speed Secondary Cluster (Nabh Cloud) ──
@@ -1705,58 +1720,64 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     }
 
     // ── B) NON-STREAMING MODE ──
+    const hasTools = Array.isArray(payload.tools) && payload.tools.length > 0;
+
     // 1. TokenJuice DeepSeek Primary Gateway Engine
-    try {
-      const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
-      const { res: upstreamRes } = await fetchGatewayWithRetry(
-        upstreamUrl,
-        {
-          ...payload,
-          messages: effectiveMessages,
-          model: GATEWAY_MODEL,
-          stream: false,
-        },
-        AbortSignal.timeout(12000)
-      );
-      if (upstreamRes.ok) {
-        const data = await upstreamRes.json();
-        const rawMsg = data.choices?.[0]?.message;
-        if (rawMsg) {
-          const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
-          recordTelemetryRequest({
-            model: requestedRawModel,
-            totalTokens: data.usage?.total_tokens || 50,
-            latencyMs: 1450,
-            status: "success",
-            apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
-          });
-          return NextResponse.json({
-            id: reqId,
-            object: "chat.completion",
-            created: createdTimestamp,
-            model: requestedRawModel,
-            choices: [{
-              index: 0,
-              message: cleanedMsg,
-              finish_reason: "stop",
-            }],
-            usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
-          }, { headers: CORS_HEADERS });
+    if (isGatewayAvailable()) {
+      try {
+        const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+        const { res: upstreamRes } = await fetchGatewayWithRetry(
+          upstreamUrl,
+          {
+            ...payload,
+            messages: effectiveMessages,
+            model: GATEWAY_MODEL,
+            stream: false,
+          },
+          AbortSignal.timeout(2500)
+        );
+        if (upstreamRes.ok) {
+          const data = await upstreamRes.json();
+          const rawMsg = data.choices?.[0]?.message;
+          if (rawMsg) {
+            const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
+            recordTelemetryRequest({
+              model: requestedRawModel,
+              totalTokens: data.usage?.total_tokens || 50,
+              latencyMs: 1450,
+              status: "success",
+              apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+            });
+            return NextResponse.json({
+              id: reqId,
+              object: "chat.completion",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{
+                index: 0,
+                message: cleanedMsg,
+                finish_reason: data.choices?.[0]?.finish_reason || (cleanedMsg.tool_calls ? "tool_calls" : "stop"),
+              }],
+              usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+            }, { headers: CORS_HEADERS });
+          }
         }
-      }
-    } catch { }
+      } catch { }
+    }
 
     // 1B. Requesty High-Performance Gateway (Active Verified Key)
-    try {
-      const reqKey = REQUESTY_FALLBACK_KEYS[0];
-      let reqModel = requestedRawModel;
-      if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
-        reqModel = "mistral/leanstral-1-5";
-      } else if (requestedRawModel.includes("ling")) {
-        reqModel = "novita/ling-3.1-flash";
-      } else if (!reqModel.includes("/")) {
-        reqModel = "mistral/leanstral-1-5";
-      }
+    // Only route if NOT DeepSeek and NOT tool calling
+    if (!isDeepSeek && !hasTools) {
+      try {
+        const reqKey = REQUESTY_FALLBACK_KEYS[0];
+        let reqModel = requestedRawModel;
+        if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
+          reqModel = "mistral/leanstral-1-5";
+        } else if (requestedRawModel.includes("ling")) {
+          reqModel = "novita/ling-3.1-flash";
+        } else if (!reqModel.includes("/")) {
+          reqModel = "mistral/leanstral-1-5";
+        }
 
       const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
         method: "POST",
@@ -1800,6 +1821,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         }
       }
     } catch { }
+  }
 
     // 2. High-Speed Secondary Cluster (Nabh Cloud)
     for (let attempt = 0; attempt < 2; attempt++) {

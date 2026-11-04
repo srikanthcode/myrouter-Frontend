@@ -19,6 +19,7 @@ import {
   ScanSearch,
   ScrollText,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
   Wallet,
@@ -91,6 +92,9 @@ const nav = [
     { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
     { href: "/pricing", label: "Billing & Plans", icon: CreditCard },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
+  ]},
+  { section: "Administration", items: [
+    { href: "/dashboard/admin", label: "Admin Console", icon: ShieldCheck },
   ]},
   { section: "Account", items: [
     { href: "/dashboard/settings", label: "Settings", icon: Settings },

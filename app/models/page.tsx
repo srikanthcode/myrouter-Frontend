@@ -205,6 +205,44 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
           </div>
         </div>
 
+        {/* ── 48-Hour Promotional Launch Special (§Phase 4) ── */}
+        <div className="mb-6 relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-r from-accent/20 via-panel to-panel2 p-6 shadow-xl shadow-accent/10">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+            <div className="space-y-2 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 border border-accent/40 px-3 py-1 text-xs font-bold text-accent uppercase tracking-wider">
+                  <Sparkles className="size-3.5" />
+                  LAUNCH SPECIAL · 48 HOURS FREE
+                </span>
+                <span className="rounded-full bg-good/20 border border-good/40 px-2.5 py-0.5 text-[11px] font-semibold text-good">
+                  100% Free Access
+                </span>
+              </div>
+              <h2 className="text-xl font-bold tracking-tight text-fg sm:text-2xl">
+                48 Hours Free: DeepSeek V4.1 Flash & Qwen3.8-27B
+              </h2>
+              <p className="text-xs text-mut leading-relaxed">
+                Experience ultra-fast next-generation coding and reasoning inference with zero token charges for 48 hours upon activation. Test both frontier models directly in the playground or connect your OpenAI SDK.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0">
+              <Link
+                href="/chat?model=deepseek-v4.1-flash"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-bold text-ink shadow-md hover:opacity-95 transition-all duration-200"
+              >
+                <span>🚀 Activate Free Access</span>
+              </Link>
+              <Link
+                href="/chat?model=qwen3.8-27b"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-panel2/80 px-4 py-2.5 text-xs font-semibold text-fg hover:bg-panel2 transition-colors"
+              >
+                <span>Test Qwen 3.8</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="mb-6 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -280,6 +318,7 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {models.map((m) => {
               const dual = formatDualPricing(m.pricing.inputPerMillion, m.pricing.outputPerMillion, m.isFree);
+              const isPromoModel = m.slug.includes("deepseek-v4.1") || m.slug.includes("qwen3.8") || m.slug.includes("qwen-2.5-coder-32b");
               const isOneMillion = m.contextWindow >= 1000000;
               const isQuarterMillion = m.contextWindow >= 250000;
               const isTwoHundredK = m.contextWindow >= 200000;
@@ -296,7 +335,11 @@ export default async function ModelsPage({ searchParams }: { searchParams: Searc
                         <h2 className="truncate text-[15.5px] font-semibold text-fg transition-colors duration-200 group-hover:text-accent">
                           {m.name}
                         </h2>
-                        {m.isFree && (
+                        {isPromoModel ? (
+                          <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent uppercase tracking-wider">
+                            48H FREE LAUNCH
+                          </span>
+                        ) : m.isFree && (
                           <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                             FREE
                           </span>

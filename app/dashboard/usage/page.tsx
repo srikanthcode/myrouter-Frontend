@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Cpu, IndianRupee, TriangleAlert } from "lucide-react";
+import { Activity, Cpu, Download, IndianRupee, Sparkles, TriangleAlert } from "lucide-react";
 import { ApiError, api, formatINR } from "@/lib/api";
 import { Badge, Card, Skeleton } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
@@ -32,6 +32,28 @@ export default function UsagePage() {
   const [days, setDays] = useState(30);
   const [metric, setMetric] = useState<Metric>("requests");
   const [error, setError] = useState<string | null>(null);
+
+  
+  const exportUsageCsv = () => {
+    if (!usage || !usage.byModel) return;
+    const headers = ["Model", "Requests", "Tokens", "Avg Tokens", "Cost (INR)", "Cost (USD)"];
+    const rows = usage.byModel.map((m) => [
+      m.model || "unknown",
+      m.n,
+      m.tokens,
+      Math.round(m.tokens / Math.max(1, m.n)),
+      `₹${(m.cost / 100).toFixed(2)}`,
+      `${(m.cost / 100 / 80).toFixed(4)}`,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `prorouter_usage_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -151,7 +173,17 @@ export default function UsagePage() {
       {usage.byModel.length > 0 && (
         <Card>
           <div className="border-b border-line px-5 py-3.5">
-            <h2 className="text-sm font-semibold">Cost by model · 30 days</h2>
+            <div className="flex items-center justify-between w-full">
+              <h2 className="text-sm font-semibold">Model-Wise Consumption & Analytics · 30 Days</h2>
+              <button
+                type="button"
+                onClick={exportUsageCsv}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel2/80 px-2.5 py-1 text-xs text-mut hover:text-fg transition-colors cursor-pointer"
+              >
+                <Download className="size-3" />
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[13px]">

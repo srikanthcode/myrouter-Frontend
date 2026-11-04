@@ -1117,31 +1117,39 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const clientKey = authHeader.replace(/^Bearer\s+/i, "").trim();
     const isDefaultPlaygroundKey = !clientKey || clientKey === "pro_sk_live_playground_default";
 
+    // Phase 4: Check if requested model qualifies for 48-Hour Promotional Launch Special
+    const reqModelLower = requestedRawModel.toLowerCase();
+    const isPromo48hModel = reqModelLower.includes("deepseek-v4.1") || reqModelLower.includes("qwen3.8") || reqModelLower.includes("qwen-2.5-coder-32b");
+
     if (isDefaultPlaygroundKey) {
       const forwarded = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
       const clientIp = forwarded.split(",")[0].trim();
       const now = Date.now();
-      let usage = freePlaygroundIpUsage.get(clientIp);
-      if (!usage || (now - usage.lastReset) > ONE_DAY_MS) {
-        usage = { count: 0, lastReset: now };
-        freePlaygroundIpUsage.set(clientIp, usage);
-      }
 
-      if (usage.count >= FREE_PLAYGROUND_LIMIT) {
-        return NextResponse.json(
-          {
-            error: {
-              code: "free_playground_limit_reached",
-              message: "Free playground limit reached (" + FREE_PLAYGROUND_LIMIT + "/" + FREE_PLAYGROUND_LIMIT + " requests used). Please sign in and activate Pay-As-You-Go at https://www.prorouter.in/dashboard/billing to continue testing 500+ models with unlimited access.",
-              limit: FREE_PLAYGROUND_LIMIT,
-              used: usage.count,
+      // Only promotional models (DeepSeek V4.1 Flash & Qwen 3.8) bypass the 10-request guest cap during launch
+      if (!isPromo48hModel) {
+        let usage = freePlaygroundIpUsage.get(clientIp);
+        if (!usage || (now - usage.lastReset) > ONE_DAY_MS) {
+          usage = { count: 0, lastReset: now };
+          freePlaygroundIpUsage.set(clientIp, usage);
+        }
+
+        if (usage.count >= FREE_PLAYGROUND_LIMIT) {
+          return NextResponse.json(
+            {
+              error: {
+                code: "free_playground_limit_reached",
+                message: "Free playground limit reached (" + FREE_PLAYGROUND_LIMIT + "/" + FREE_PLAYGROUND_LIMIT + " requests used). Please sign in and activate Pay-As-You-Go at https://www.prorouter.in/dashboard/billing to continue testing 500+ models with unlimited access.",
+                limit: FREE_PLAYGROUND_LIMIT,
+                used: usage.count,
+              },
             },
-          },
-          { status: 402, headers: CORS_HEADERS }
-        );
-      }
+            { status: 402, headers: CORS_HEADERS }
+          );
+        }
 
-      usage.count += 1;
+        usage.count += 1;
+      }
     }
 
     let payload: Record<string, unknown> = {};

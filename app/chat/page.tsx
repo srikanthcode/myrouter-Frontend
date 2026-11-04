@@ -385,8 +385,9 @@ export default function ChatPage() {
 
       const keyToUse = apiKey.trim() || "pro_sk_live_playground_default";
 
-      // Enforce 10-request limit for free users
-      if (!isPayAsYouGo && freeUsed >= FREE_LIMIT) {
+      // Enforce 10-request limit for free users (except 48h promotional models DeepSeek & Qwen)
+      const isPromoModel = selectedModelMeta.slug.includes("deepseek-v4.1") || selectedModelMeta.slug.includes("qwen3.8") || selectedModelMeta.slug.includes("qwen-2.5-coder-32b");
+      if (!isPayAsYouGo && !isPromoModel && freeUsed >= FREE_LIMIT) {
         setShowUpgradeModal(true);
         setError(`Free playground limit reached (${FREE_LIMIT}/${FREE_LIMIT} requests used). Activate Pay-As-You-Go to continue.`);
         return;

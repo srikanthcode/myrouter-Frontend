@@ -1,4 +1,7 @@
 
+const globalPromoActivations = new Map<string, number>();
+
+
 export function isValidGmail(email: string): boolean {
   if (!email || typeof email !== "string") return false;
   const trimmed = email.trim().toLowerCase();
@@ -657,6 +660,60 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   if (subpath === "/promotions/astra/redeem" && method === "POST") {
     return NextResponse.json({ ok: true, addedPaise: 5000 });
   }
+  // ── 48-Hour Promotional Launch Special (§Phase 4) ──
+  if (subpath === "/promotions/launch-48h") {
+    const user = parseSessionCookie(req);
+    const userId = user?.id || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "guest-session";
+    const storedStart = globalPromoActivations.get(userId);
+    const now = Date.now();
+    const duration = 48 * 3600 * 1000;
+    const activated = Boolean(storedStart);
+    const expiresAt = storedStart ? storedStart + duration : null;
+    const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
+    const active = Boolean(expiresAt && remainingMs > 0);
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return NextResponse.json({
+      campaign: "launch-48h-special",
+      name: "Launch Special: 48 Hours Free",
+      eligibleModels: ["deepseek-v4.1-flash", "qwen3.8-27b"],
+      durationHours: 48,
+      activated,
+      active,
+      remainingMs,
+      remainingFormatted: active ? `${hours}h ${mins}m left` : (activated ? "Expired" : "Not activated"),
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    });
+  }
+
+  if (subpath === "/promotions/launch-48h/activate" && method === "POST") {
+    const user = parseSessionCookie(req);
+    const userId = user?.id || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "guest-session";
+    const duration = 48 * 3600 * 1000;
+    let storedStart = globalPromoActivations.get(userId);
+    let alreadyActivated = true;
+    if (!storedStart) {
+      storedStart = Date.now();
+      globalPromoActivations.set(userId, storedStart);
+      alreadyActivated = false;
+    }
+    const expiresAt = storedStart + duration;
+    const remainingMs = Math.max(0, expiresAt - Date.now());
+    const active = remainingMs > 0;
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return NextResponse.json({
+      ok: true,
+      alreadyActivated,
+      active,
+      remainingMs,
+      remainingFormatted: `${hours}h ${mins}m left`,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
+  }
+
 
   // ── Models & Providers Catalog ──
   if (subpath === "/models") {

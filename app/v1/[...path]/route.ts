@@ -4,6 +4,36 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60; // Support full streaming inference duration on Vercel
 
+
+const NABH_KEYS = [
+  "nbh_b3fcd9f97076ca53ddeee30ad1bf8f220e47145f435f0aa3e1ba6896869e3303",
+  "nbh_83166cf42aa1b286777afdf810f977093854ed655b433096fcd29aca97cb82fc",
+  "nbh_879e56fdcc4d82393e7009cf4c08a4ed34b00bf3dfa98fd8cc8b2091a869680b",
+  "nbh_fe4265079ae075e05d94a9a0c65dbc1ab88cea3f64fd3cd1c0338eef26088237",
+  "nbh_5ed9c93ac022f66ccfa9dea30ed00f3da03602b821a104a3f49698229f1c2b50",
+  "nbh_65b4a897d93c20ec26412b20e3f55471bfec7274d103b4253906084877027a83",
+  "nbh_964f22684360564cf82add241ed72d3e2b4038a46df8482fbdf3defab494688f",
+  "nbh_91f16aded8487ac5ff0e687c1189c270186d674b6d89206447d345ef75ae5fbb",
+  "nbh_6a6f3589fe5da72d943952362dcdf8e59a6c6453e056ec473f219268e125af3b",
+  "nbh_3ff2326527e5f0907f241a5fa117deaf97d095fbb0a8e2debfbe5f3c940a385c",
+  "nbh_dc3e0539f632541267c0a05c42c145128e679be16bc02fc11bb4cd2fe9f09e70",
+  "nbh_ad9c393ec7259d854a54ab3fbe8988aa679e283569b0ed256c22bbde38adf94e",
+  "nbh_f41f187d30088042928a9c3b08295f0470acfec924664b4cf45a3bd1bed88630",
+  "nbh_19f1817334c3691791eae6742885d51521a425877b1a7fc79bfa3cb2af73d691",
+  "nbh_c5c7a6a7ea5b320a086d58efe0a762ff44544d20e2f1497ef3ff0f528ac42442",
+  "nbh_51fce650e3de3764658dcea2ff2ba1cc28530999c473a74741b03a5c9b970a2f",
+  "nbh_97d6b3aaf89d713abbe97fe55adfbbeb1e11d1baf1e1adc1a93ce485e36f8c73",
+  "nbh_7931b2692ed1ce28b277b7cdf2201bb02ae6624a413ad52b7952f38c930102ad",
+  "nbh_7f6e57c50a22dc24fb8f540cabff91d92c9126da984c17fafef3177bbc06b576",
+  "nbh_af46b9616cba47d01ddb00bdb7bd15e75226caffc6f78bb6c3ea2f870693bd7b"
+];
+let nabhCursor = 0;
+function getNextNabhKey() {
+  const k = NABH_KEYS[nabhCursor % NABH_KEYS.length];
+  nabhCursor++;
+  return k;
+}
+
 // ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
 const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 const DEFAULT_GATEWAY_BASE = "https://api.tokenjuice.ai/v1";
@@ -816,12 +846,90 @@ async function streamGateway(
     }
   }, 2000);
 
-  // ── Engine 1: Fast FreeModels Edge Worker (Zero wait, 2-4s full completion) ──
+  // ── Engine 1: Nabh Cloud Ultra-Fast Balanced Engine (2-4s response) ──
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const key = getNextNabhKey();
+    try {
+      const res = await fetch("https://api.nabh.cloud/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + key,
+        },
+        body: JSON.stringify({
+          model: "gpt-oss-20b",
+          messages: effectiveMessages,
+          stream: true,
+        }),
+        signal: AbortSignal.timeout(9000),
+      });
+
+      if (res.ok && res.body) {
+        clearInterval(pingInterval);
+        const reader = res.body.getReader();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            if (trimmed === "data: [DONE]") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              continue;
+            }
+            try {
+              const parsed = JSON.parse(trimmed.slice(5).trim());
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta && typeof delta.content === "string") {
+                let content = delta.content;
+                if (shouldCleanAsterisks) {
+                  content = cleanAsterisks(content);
+                }
+                content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+                delta.content = content;
+              }
+              const chunk = {
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content: delta?.content || "" },
+                    finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                  },
+                ],
+              };
+              controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+            } catch {}
+          }
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+        return;
+      }
+    } catch (nabhErr) {
+      // Continue to next attempt or fallback
+    }
+  }
+
+  // ── Engine 2: FreeModels Edge Cluster Fallback ──
   try {
     const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
     const fmRes = await fetch(FREEMODELS_URL, {
       method: "POST",
-      headers: FREEMODELS_HEADERS,
+      headers: {
+        ...FREEMODELS_HEADERS,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
+      },
       body: JSON.stringify({
         model: fmModel,
         messages: effectiveMessages,
@@ -881,11 +989,9 @@ async function streamGateway(
       controller.close();
       return;
     }
-  } catch (fmErr) {
-    // Edge worker fallback, continue to Engine 2
-  }
+  } catch (fmErr) {}
 
-  // ── Engine 2: TokenJuice AI Gateway with Fallback Key Pool ──
+  // ── Engine 3: TokenJuice AI Gateway Fallback ──
   try {
     const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
@@ -925,10 +1031,7 @@ async function streamGateway(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) {
-          if (trimmed) controller.enqueue(encoder.encode(line + "\n"));
-          continue;
-        }
+        if (!trimmed.startsWith("data:")) continue;
         if (trimmed === "data: [DONE]") {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           continue;
@@ -937,8 +1040,8 @@ async function streamGateway(
           const parsed = JSON.parse(trimmed.slice(5).trim());
           if (parsed.model) parsed.model = requestedRawModel;
           const delta = parsed.choices?.[0]?.delta;
-          if (delta && typeof delta.content === "string") {
-            let content = delta.content;
+          if (delta && (typeof delta.content === "string" || typeof delta.reasoning_content === "string")) {
+            let content = delta.content || delta.reasoning_content || "";
             if (shouldCleanAsterisks) {
               content = cleanAsterisks(content);
             }
@@ -946,14 +1049,7 @@ async function streamGateway(
             delta.content = content;
           }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
-        } catch {
-          let fallback = line.replaceAll(GATEWAY_MODEL, requestedRawModel);
-          if (shouldCleanAsterisks) {
-            fallback = cleanAsterisks(fallback);
-          }
-          fallback = sanitizeModelIdentity(fallback, modelDisplayName, ownerName);
-          controller.enqueue(encoder.encode(fallback + "\n"));
-        }
+        } catch {}
       }
     }
 
@@ -1092,52 +1188,48 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     }
 
     // ── B) NON-STREAMING MODE ──
-    // 1. Try Fast FreeModels Edge Worker
-    try {
-      const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
-      const fmRes = await fetch(FREEMODELS_URL, {
-        method: "POST",
-        headers: FREEMODELS_HEADERS,
-        body: JSON.stringify({
-          model: fmModel,
-          messages: effectiveMessages,
-        }),
-        signal: AbortSignal.timeout(9000),
-      });
+    // 1. Nabh Cloud Ultra-Fast Engine
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const key = getNextNabhKey();
+      try {
+        const nabhRes = await fetch("https://api.nabh.cloud/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + key,
+          },
+          body: JSON.stringify({
+            model: "gpt-oss-20b",
+            messages: effectiveMessages,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(9000),
+        });
 
-      if (fmRes.ok) {
-        const text = await fmRes.text();
-        let aggregatedContent = "";
-        for (const line of text.split("\n")) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data:") && !trimmed.includes("[DONE]")) {
-            try {
-              const p = JSON.parse(trimmed.slice(5).trim());
-              const c = p.choices?.[0]?.delta?.content;
-              if (c) aggregatedContent += c;
-            } catch {}
+        if (nabhRes.ok) {
+          const data = await nabhRes.json();
+          let content = data.choices?.[0]?.message?.content || "";
+          if (content.trim()) {
+            if (shouldCleanAsterisks) content = cleanAsterisks(content);
+            content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+            return NextResponse.json({
+              id: reqId,
+              object: "chat.completion",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{
+                index: 0,
+                message: { role: "assistant", content },
+                finish_reason: "stop",
+              }],
+              usage: data.usage || { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
+            }, { status: 200, headers: CORS_HEADERS });
           }
         }
-        if (aggregatedContent.trim()) {
-          if (shouldCleanAsterisks) aggregatedContent = cleanAsterisks(aggregatedContent);
-          aggregatedContent = sanitizeModelIdentity(aggregatedContent, modelDisplayName, ownerName);
-          return NextResponse.json({
-            id: reqId,
-            object: "chat.completion",
-            created: createdTimestamp,
-            model: requestedRawModel,
-            choices: [{
-              index: 0,
-              message: { role: "assistant", content: aggregatedContent },
-              finish_reason: "stop",
-            }],
-            usage: { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
-          }, { status: 200, headers: CORS_HEADERS });
-        }
-      }
-    } catch {}
+      } catch (e) {}
+    }
 
-    // 2. TokenJuice Upstream Gateway Fallback
+    // 2. Fallback to TokenJuice
     const abortCtrl = new AbortController();
     const timeoutId = setTimeout(() => abortCtrl.abort(), 9000);
     const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;

@@ -1036,6 +1036,45 @@ export const MODEL_PROFILES_500: ModelSummary[] = [
     "available": true
   },
   {
+    "id": "qwen-2.5-coder-32b",
+    "slug": "qwen-2.5-coder-32b",
+    "name": "Qwen 2.5 Coder 32B",
+    "category": "coding",
+    "categoryLabel": "Coding & Software Engineering",
+    "description": "Alibaba Cloud Qwen 2.5 Coder 32B - open frontier specialized coding model for repository synthesis and multi-file debugging. Free for 48 hours.",
+    "providerName": "Alibaba Cloud",
+    "providerSlug": "alibaba",
+    "type": "chat",
+    "status": "active",
+    "isFree": true,
+    "pricing": {
+      "inputPerMillion": 0,
+      "outputPerMillion": 0,
+      "cachedInputPerMillion": 0,
+      "currency": "INR"
+    },
+    "capabilities": {
+      "modalities": [
+        "text"
+      ],
+      "streaming": true,
+      "toolCalls": true,
+      "structuredOutputs": false,
+      "reasoning": true,
+      "vision": false,
+      "imageGeneration": false,
+      "audio": false,
+      "jsonMode": true
+    },
+    "contextWindow": 131072,
+    "maxOutputTokens": 32768,
+    "rank": 26,
+    "popularity": 9800,
+    "rating": 100,
+    "latencyMs": 195,
+    "available": true
+  },
+  {
     "id": "nemotron-3-ultra-550b-a55b",
     "slug": "nemotron-3-ultra-550b-a55b",
     "name": "Nemotron 3 Ultra 550B A55B",

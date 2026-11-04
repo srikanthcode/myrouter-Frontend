@@ -32,7 +32,7 @@ import {
   DEFAULT_TARGET_GROSS_MARGIN,
   DEFAULT_USD_TO_INR_RATE,
   calculateSellingPrice,
-} from "@pro/shared";
+} from "@/lib/pricing-engine";
 
 import { getDeterministicAccountNumber, getDeterministicUserId } from "@/components/DashboardShell";
 

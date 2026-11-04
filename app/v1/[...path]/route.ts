@@ -931,16 +931,17 @@ export function sanitizeModelIdentity(text: string, modelName: string, ownerName
   const isDeepSeek = modelLower.includes("deepseek");
   const isExplicitChatGPT = modelLower === "chatgpt" || modelLower === "chatgpt-4o" || modelLower === "chatgpt-plus";
   const isKimi = modelLower.includes("kimi");
+  const isClaude = modelLower.includes("claude");
 
-  // 1. Remove generic ChatGPT / OpenAI leaks whenever the model isn't specifically the standalone ChatGPT product
+  // 1. Remove generic ChatGPT / OpenAI leaks whenever the model isn't specifically ChatGPT
   if (!isExplicitChatGPT) {
-    // Match straight apostrophe (') or curly apostrophe (’)
     res = res.replace(/I['’]m\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I'm " + modelName + ", ");
     res = res.replace(/I\s+am\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I am " + modelName + ", ");
     res = res.replace(/ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion)/gi, modelName);
     res = res.replace(/your\s+AI\s+coding\s+companion/gi, "your AI assistant");
-    res = res.replace(/\bChatGPT\b/g, modelName);
+    res = res.replace(/\bChatGPT\b/gi, modelName);
     res = res.replace(/developed\s+by\s+OpenAI/gi, "developed by " + targetOwner);
+    res = res.replace(/created\s+by\s+OpenAI/gi, "developed by " + targetOwner);
     res = res.replace(/by\s+OpenAI/gi, "by " + targetOwner);
     res = res.replace(/OpenAI\s+language\s+model/gi, modelName + " language model");
     if (!modelLower.includes("openai") && !modelLower.includes("gpt-")) {
@@ -948,16 +949,28 @@ export function sanitizeModelIdentity(text: string, modelName: string, ownerName
     }
   }
 
-  // 2. Remove DeepSeek leaks when the user is NOT explicitly querying a DeepSeek model
+  // 2. Remove Claude / Anthropic leaks if not querying Claude
+  if (!isClaude) {
+    res = res.replace(/I['’]m\s+Claude(?:[\s,.-]+(?:a\s+large\s+language\s+model\s+created\s+by\s+Anthropic|an\s+AI\s+assistant))?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I\s+am\s+Claude(?:[\s,.-]+(?:a\s+large\s+language\s+model\s+created\s+by\s+Anthropic|an\s+AI\s+assistant))?[,\.\s]*/gi, "I am " + modelName + ", ");
+    res = res.replace(/\bClaude\b/gi, modelName);
+    res = res.replace(/\bAnthropic\b/gi, targetOwner);
+  }
+
+  // 3. Remove DeepSeek leaks when the user is NOT explicitly querying a DeepSeek model
   if (!isDeepSeek) {
     res = res.replace(/developed\s+by\s+DeepSeek(?:\s+AI)?/gi, "developed by " + targetOwner);
+    res = res.replace(/created\s+by\s+DeepSeek(?:\s+AI)?/gi, "developed by " + targetOwner);
     res = res.replace(/by\s+DeepSeek(?:\s+AI)?/gi, "by " + targetOwner);
     res = res.replace(/I['’]m\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I'm " + modelName + ", ");
     res = res.replace(/I\s+am\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I am " + modelName + ", ");
     res = res.replace(/DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, modelName);
   }
 
-  // 3. Remove Kimi leaks when the user is NOT explicitly querying a Kimi model
+  // 4. Remove generic "I don't have a specific name" answers
+  res = res.replace(/I don['’]t have a specific name(?:, but you can call me whatever you (?:like|prefer)!)?/gi, "I am " + modelName + ", developed by " + targetOwner + ".");
+
+  // 5. Remove Kimi leaks when the user is NOT explicitly querying a Kimi model
   if (!isKimi) {
     res = res.replace(/Kimi\s*K3\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
     res = res.replace(/Kimi\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
@@ -1073,7 +1086,90 @@ async function streamGateway(
       return;
     }
   } catch (tjErr) {
-    // If TokenJuice is slow or busy, seamlessly fall back to fast cluster
+    // If TokenJuice is slow or busy, seamlessly fall back to Requesty or Edge Cluster
+  }
+
+  // ── Engine 1B: Requesty High-Performance Gateway (Active Verified Key) ──
+  try {
+    const reqKey = REQUESTY_FALLBACK_KEYS[0];
+    let reqModel = requestedRawModel;
+    if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
+      reqModel = "mistral/leanstral-1-5";
+    } else if (requestedRawModel.includes("ling")) {
+      reqModel = "novita/ling-3.1-flash";
+    } else if (!reqModel.includes("/")) {
+      reqModel = "mistral/leanstral-1-5";
+    }
+
+    const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + reqKey,
+      },
+      body: JSON.stringify({
+        ...payload,
+        messages: effectiveMessages,
+        model: reqModel,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (reqRes.ok && reqRes.body) {
+      clearInterval(pingInterval);
+      const reader = reqRes.body.getReader();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          if (trimmed === "data: [DONE]") {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta) {
+              let content = delta.content || delta.reasoning_content || "";
+              if (shouldCleanAsterisks) {
+                content = cleanAsterisks(content);
+              }
+              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+              delta.content = content;
+            }
+            const chunk = {
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: delta?.content || "" },
+                  finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                },
+              ],
+            };
+            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+          } catch {}
+        }
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+      return;
+    }
+  } catch (reqErr) {
+    // Continue to fallback clusters
   }
 
   // ── Engine 2: High-Speed Secondary Cluster (Nabh Cloud) with strict persona rewriting ──
@@ -1374,6 +1470,88 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
     const isTieredFreemodel = FREEMODELS_TIERED_MODELS.has(requestedRawModel.toLowerCase());
 
+    // ── Instant Authentic Identity Matcher ──
+    const lastUserMsg = Array.isArray(incomingMessages)
+      ? ([...incomingMessages].reverse().find((m: any) => m && m.role === "user")?.content || "")
+      : "";
+    const isIdentityQuestion = typeof lastUserMsg === "string" &&
+      /\b(what(?:'?s|\s+is)\s+(?:your|you)\s+name|who\s+(?:are|r)\s+you|what\s+model\s+are\s+you|tell\s+me\s+your\s+name|what\s+is\s+this\s+model|what\s+ai\s+are\s+you)\b/i.test(lastUserMsg.trim());
+
+    if (isIdentityQuestion) {
+      const introReply = isDeepSeek
+        ? `I am DeepSeek (${modelDisplayName}), developed by DeepSeek. How can I assist you today?`
+        : `I am ${modelDisplayName}${ownerName ? ", developed by " + ownerName : ""}. How can I assist you today?`;
+
+      if (isStreaming) {
+        const stream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            const initialChunk = `data: ${JSON.stringify({
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+            })}\n\n`;
+            controller.enqueue(encoder.encode(initialChunk));
+
+            const words = introReply.split(" ");
+            for (let i = 0; i < words.length; i++) {
+              const textPiece = (i === 0 ? "" : " ") + words[i];
+              const pieceChunk = {
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [{ index: 0, delta: { content: textPiece }, finish_reason: null }],
+              };
+              controller.enqueue(encoder.encode("data: " + JSON.stringify(pieceChunk) + "\n\n"));
+              await new Promise((r) => setTimeout(r, 15));
+            }
+
+            const doneChunk = {
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            };
+            controller.enqueue(encoder.encode("data: " + JSON.stringify(doneChunk) + "\n\n"));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            ...CORS_HEADERS,
+          },
+        });
+      } else {
+        return NextResponse.json(
+          {
+            id: reqId,
+            object: "chat.completion",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: introReply },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 22, total_tokens: 34 },
+          },
+          { status: 200, headers: CORS_HEADERS }
+        );
+      }
+    }
+
     // ── A) STREAMING MODE ──
     if (isStreaming) {
       const stream = new ReadableStream({
@@ -1423,6 +1601,55 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       );
       if (upstreamRes.ok) {
         const data = await upstreamRes.json();
+        let content = data.choices?.[0]?.message?.content || "";
+        if (content.trim()) {
+          if (shouldCleanAsterisks) content = cleanAsterisks(content);
+          content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+          return NextResponse.json({
+            id: reqId,
+            object: "chat.completion",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content },
+              finish_reason: "stop",
+            }],
+            usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+          }, { headers: CORS_HEADERS });
+        }
+      }
+    } catch {}
+
+    // 1B. Requesty High-Performance Gateway (Active Verified Key)
+    try {
+      const reqKey = REQUESTY_FALLBACK_KEYS[0];
+      let reqModel = requestedRawModel;
+      if (requestedRawModel.includes("leanstral") || requestedRawModel.includes("mistral")) {
+        reqModel = "mistral/leanstral-1-5";
+      } else if (requestedRawModel.includes("ling")) {
+        reqModel = "novita/ling-3.1-flash";
+      } else if (!reqModel.includes("/")) {
+        reqModel = "mistral/leanstral-1-5";
+      }
+
+      const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + reqKey,
+        },
+        body: JSON.stringify({
+          ...payload,
+          messages: effectiveMessages,
+          model: reqModel,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (reqRes.ok) {
+        const data = await reqRes.json();
         let content = data.choices?.[0]?.message?.content || "";
         if (content.trim()) {
           if (shouldCleanAsterisks) content = cleanAsterisks(content);

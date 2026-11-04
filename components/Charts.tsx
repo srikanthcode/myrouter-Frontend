@@ -52,18 +52,14 @@ export function BarChart({
   metric?: ChartMetric;
   height?: number;
 }) {
-  const [showDemo, setShowDemo] = useState(false);
+  const hasRealData = data && data.length > 0 && Math.max(...data.map((d) => d[metric] ?? 0), 0) > 0;
+  const [showDemo, setShowDemo] = useState(!hasRealData);
 
-  const activeData = showDemo
-    ? SAMPLE_SERIES
-    : data.length > 0 && Math.max(...data.map((d) => d[metric] ?? 0), 0) > 0
-    ? data
-    : [];
-
+  const activeData = hasRealData ? data : showDemo ? SAMPLE_SERIES : [];
   const values = activeData.map((d) => d[metric] ?? 0);
   const max = Math.max(...values, 0);
 
-  // If completely empty and not showing demo, display high-tech animated ready state
+  // If user explicitly toggled off demo and has 0 data
   if (activeData.length === 0 || max === 0) {
     return (
       <div
@@ -72,12 +68,10 @@ export function BarChart({
         role="img"
         aria-label="Chart — gateway ready for activity"
       >
-        {/* Radar scanline animation */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-30">
           <div className="animate-radar h-full w-1/3 bg-gradient-to-r from-transparent via-accent/30 to-transparent blur-md" />
         </div>
 
-        {/* Live heartbeat pulse icon */}
         <div className="relative mb-3 flex items-center justify-center">
           <div className="animate-ping absolute size-7 rounded-full bg-accent/25" />
           <div className="relative flex size-8 items-center justify-center rounded-full border border-accent/40 bg-accent/15 text-accent shadow-[0_0_15px_rgba(34,197,94,0.3)]">
@@ -131,17 +125,17 @@ export function BarChart({
 
   return (
     <div className="w-full">
-      {showDemo && (
-        <div className="mb-2 flex items-center justify-between rounded-lg border border-accent/25 bg-accent/10 px-3 py-1.5 text-[11.5px] text-accent">
+      {!hasRealData && showDemo && (
+        <div className="mb-2.5 flex items-center justify-between rounded-lg border border-accent/25 bg-accent/10 px-3 py-1.5 text-[11.5px] text-accent">
           <span className="flex items-center gap-1.5 font-medium">
-            <Sparkles className="size-3.5" /> Showing simulated production telemetry preview
+            <Sparkles className="size-3.5" /> Simulated 14-day production activity preview
           </span>
           <button
             type="button"
             onClick={() => setShowDemo(false)}
             className="cursor-pointer font-medium underline opacity-80 hover:opacity-100"
           >
-            Reset to real data
+            Clear to blank
           </button>
         </div>
       )}
@@ -238,15 +232,11 @@ export function UsageBars({
   items: Array<{ label: string; value: number; hint?: string }>;
   total: number;
 }) {
-  const [showDemo, setShowDemo] = useState(false);
+  const hasRealUsage = items && items.length > 0 && total > 0;
+  const [showDemo, setShowDemo] = useState(!hasRealUsage);
 
-  const activeItems = showDemo
-    ? SAMPLE_USAGE_MODELS
-    : items && items.length > 0 && total > 0
-    ? items
-    : [];
-
-  const activeTotal = showDemo ? 1230 : total;
+  const activeItems = hasRealUsage ? items : showDemo ? SAMPLE_USAGE_MODELS : [];
+  const activeTotal = hasRealUsage ? total : showDemo ? 1230 : 0;
 
   if (activeItems.length === 0 || !activeTotal || activeTotal <= 0) {
     return (
@@ -267,15 +257,15 @@ export function UsageBars({
 
   return (
     <div className="space-y-4">
-      {showDemo && (
+      {!hasRealUsage && showDemo && (
         <div className="flex items-center justify-between text-[11px] text-accent">
-          <span>⚡ Sample Model Breakdown</span>
+          <span>⚡ Simulated Model Mix Preview</span>
           <button
             type="button"
             onClick={() => setShowDemo(false)}
             className="cursor-pointer underline opacity-80 hover:opacity-100"
           >
-            Reset
+            Clear
           </button>
         </div>
       )}

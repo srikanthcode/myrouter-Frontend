@@ -254,8 +254,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </IconButton>
               {current && (
                 <div className="hidden min-w-0 items-center gap-2 text-[13px] sm:flex">
-                  <span className="text-mut2">{current.section}</span>
-                  <span className="text-mut2" aria-hidden="true">/</span>
+                  {current.section.toLowerCase() !== current.label.toLowerCase() ? (
+                    <>
+                      <span className="text-mut2">{current.section}</span>
+                      <span className="text-mut2" aria-hidden="true">/</span>
+                    </>
+                  ) : null}
                   <span className="truncate font-medium text-fg">{current.label}</span>
                 </div>
               )}

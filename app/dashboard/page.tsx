@@ -20,6 +20,9 @@ import { Badge, Card, Skeleton } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
 import { BarChart, UsageBars, type SeriesPoint } from "@/components/Charts";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface Overview {
   balancePaise: number;
   balanceFormatted: string;
@@ -121,7 +124,7 @@ export default function DashboardHome() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showRecentDemo, setShowRecentDemo] = useState(false);
+  const [showRecentDemo, setShowRecentDemo] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchDashboardData = (quiet = false) => {
@@ -135,7 +138,9 @@ export default function DashboardHome() {
       .then(([o, s, a, u]) => {
         setData(o);
         setSeries(Array.isArray(s?.items) ? s.items : Array.isArray(s) ? (s as unknown as SeriesPoint[]) : []);
-        setActivity(Array.isArray(a?.items) ? a.items : Array.isArray(a) ? (a as unknown as ActivityItem[]) : []);
+        const loadedAct = Array.isArray(a?.items) ? a.items : Array.isArray(a) ? (a as unknown as ActivityItem[]) : [];
+        setActivity(loadedAct);
+        if (loadedAct.length > 0) setShowRecentDemo(false);
         setUsage(u && typeof u === "object" ? u : { byModel: [], byProvider: [] });
       })
       .catch((e: Error) => setError(e.message))
@@ -172,20 +177,49 @@ export default function DashboardHome() {
     );
 
   const queueReady = Array.isArray(data.queue) ? data.queue.every((q) => q.running === 0 && q.waiting === 0) : true;
+  
+  // 6 Unique metrics eliminating duplicate wallet balance cards
   const cards = [
-    { label: "Wallet balance", value: data.balanceFormatted ?? formatINR(data.balancePaise ?? 0), href: "/dashboard/wallet", icon: Wallet, highlight: true },
-    { label: "Requests today", value: (data.today?.requests ?? 0).toLocaleString("en-IN"), href: "/dashboard/activity", icon: Activity },
-    { label: "Tokens today", value: compact(data.today?.tokens ?? 0), href: "/dashboard/usage", icon: Cpu },
-    { label: "Spend today", value: formatINR(data.today?.costPaise ?? 0), href: "/dashboard/wallet", icon: IndianRupee },
-    { label: "Active API keys", value: String(data.activeKeys ?? 1), href: "/dashboard/keys", icon: KeyRound },
-    { label: "Plan", value: data.plan?.name ?? "Free Tier", href: "/pricing", icon: CreditCard },
+    {
+      label: "Requests this month",
+      value: (data.month?.requests ?? 0).toLocaleString("en-IN"),
+      href: "/dashboard/activity",
+      icon: Activity,
+    },
+    {
+      label: "Requests today",
+      value: (data.today?.requests ?? 0).toLocaleString("en-IN"),
+      href: "/dashboard/activity",
+      icon: Zap,
+    },
+    {
+      label: "Tokens today",
+      value: compact(data.today?.tokens ?? 0),
+      href: "/dashboard/usage",
+      icon: Cpu,
+    },
+    {
+      label: "Spend today",
+      value: formatINR(data.today?.costPaise ?? 0),
+      href: "/dashboard/wallet",
+      icon: IndianRupee,
+    },
+    {
+      label: "Active API keys",
+      value: String(data.activeKeys ?? 1),
+      href: "/dashboard/keys",
+      icon: KeyRound,
+    },
+    {
+      label: "Plan & Tier",
+      value: data.plan?.name ?? "Free Tier",
+      href: "/pricing",
+      icon: CreditCard,
+    },
   ];
 
-  const displayedRecent = showRecentDemo
-    ? SAMPLE_RECENT_ACTIVITY
-    : activity.length > 0
-    ? activity
-    : [];
+  const hasRealActivity = activity.length > 0;
+  const displayedRecent = hasRealActivity ? activity : showRecentDemo ? SAMPLE_RECENT_ACTIVITY : [];
 
   return (
     <div className="fade-up space-y-6">
@@ -295,20 +329,20 @@ export default function DashboardHome() {
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-fg">Recent activity</h2>
-            {showRecentDemo && (
+            {!hasRealActivity && showRecentDemo && (
               <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10.5px] font-medium text-accent">
-                Sample preview
+                ⚡ Live Preview
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            {activity.length === 0 && (
+            {!hasRealActivity && (
               <button
                 type="button"
                 onClick={() => setShowRecentDemo(!showRecentDemo)}
                 className="cursor-pointer text-[12px] font-medium text-accent hover:underline"
               >
-                {showRecentDemo ? "Hide preview" : "⚡ Preview activity"}
+                {showRecentDemo ? "Clear to blank" : "⚡ Show preview"}
               </button>
             )}
             <Link

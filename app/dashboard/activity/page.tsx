@@ -461,8 +461,8 @@ export default function ActivityPage() {
                             a.latencyMs != null && a.latencyMs < 300
                               ? "bg-good/15 text-good"
                               : a.latencyMs != null && a.latencyMs < 800
-                              ? "bg-warn/15 text-warn"
-                              : "bg-white/[0.05] text-mut"
+                                ? "bg-warn/15 text-warn"
+                                : "bg-white/[0.05] text-mut"
                           )}
                         >
                           {a.latencyMs != null ? `${a.latencyMs}ms` : "—"}

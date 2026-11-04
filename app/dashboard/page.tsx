@@ -15,9 +15,6 @@ import {
 import { api, cx } from "@/lib/api";
 import { useSession } from "@/components/DashboardShell";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 interface OverviewTelemetry {
   balancePaise?: number;
   month?: { requests: number; tokens: number; costPaise: number };
@@ -73,7 +70,12 @@ export default function DashboardOverviewPage() {
   const [selectedModelFilter, setSelectedModelFilter] = useState("By Model");
   const [selectedTimeFilter, setSelectedTimeFilter] = useState("This month");
 
+  const [mounted, setMounted] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -152,16 +154,17 @@ export default function DashboardOverviewPage() {
     const cols = 52;
     const rows = 7;
     const grid: Array<Array<{ date: string; count: number; level: number }>> = [];
-    const now = new Date();
+    const baseTime = 1793780000000;
 
     for (let c = 0; c < cols; c++) {
       const colDays = [];
       for (let r = 0; r < rows; r++) {
-        // Compute date offset
         const daysAgo = (cols - 1 - c) * 7 + (6 - r);
-        const cellDate = new Date(now.getTime() - daysAgo * 86400000);
-        const dateStr = cellDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        // Sample recent activity for November
+        const cellDate = new Date(baseTime - daysAgo * 86400000);
+        const month = MONTH_NAMES[cellDate.getUTCMonth()] || "Nov";
+        const day = cellDate.getUTCDate();
+        const year = cellDate.getUTCFullYear();
+        const dateStr = `${month} ${day}, ${year}`;
         const isRecent = daysAgo <= 1;
         const count = isRecent ? (r === 1 ? 1 : r === 3 ? 1 : 0) : 0;
         const level = count > 0 ? Math.min(count, 4) : 0;

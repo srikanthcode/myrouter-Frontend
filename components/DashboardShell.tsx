@@ -189,9 +189,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   useEffect(() => setDrawer(false), [pathname]);
 
   useEffect(() => {
-    if (!me) return;
+    if (!me?.user) return;
     api<{ items: typeof notifs }>("/notifications").then((d) => setNotifs(Array.isArray(d?.items) ? d.items : Array.isArray(d) ? (d as any) : [])).catch(() => setNotifs([]));
-  }, [me?.user.id]);
+  }, [me?.user?.id]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -221,7 +221,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }
 
   const unread = (notifs || []).filter((n) => !n?.readAt).length;
-  const initials = (me?.user.name?.trim() || me?.user.email || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (me?.user?.name?.trim() || me?.user?.email || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const current = nav.flatMap((s) => s.items.map((i) => ({ ...i, section: s.section }))).find((i) => isActivePath(pathname, i.href));
 
   return (
@@ -369,14 +369,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   aria-label="Account menu"
                   className="flex cursor-pointer items-center gap-2 rounded-lg p-1 pl-1.5 transition-colors duration-200 hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
-                  <span className="hidden max-w-[140px] truncate text-[13px] text-mut md:block">{me?.user.name || me?.user.email}</span>
+                  <span className="hidden max-w-[140px] truncate text-[13px] text-mut md:block">{me?.user?.name || me?.user?.email}</span>
                   <span className="flex size-7 items-center justify-center rounded-md border border-accent/30 bg-accent/10 font-mono text-[11px] font-semibold text-accent">{initials}</span>
                 </button>
                 {userOpen && (
                   <div className="fade-up absolute right-0 top-11 z-30 w-72 rounded-xl border border-line2 bg-panel shadow-xl">
                     <div className="border-b border-line px-4 py-3">
-                      <div className="truncate text-[13px] font-medium">{me?.user.name || "Account"}</div>
-                      <div className="truncate text-[12px] text-mut2">{me?.user.email}</div>
+                      <div className="truncate text-[13px] font-medium">{me?.user?.name || "Account"}</div>
+                      <div className="truncate text-[12px] text-mut2">{me?.user?.email}</div>
                       <div className="mt-2.5 space-y-1.5 rounded-lg border border-line/60 bg-white/[0.02] p-2 text-[11px] font-mono">
                         <div className="flex items-center justify-between text-mut">
                           <span className="text-[10px] uppercase tracking-wider text-mut2">Account #</span>

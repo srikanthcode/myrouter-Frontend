@@ -47,3 +47,4 @@ export const PROMOTIONAL_48H_MODELS = new Set<string>([
   "qwen-2.5-coder-32b",
   "qwen3.8-27b",
 ]);
+

@@ -1078,7 +1078,7 @@ async function streamGateway(
               ],
             };
             controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch {}
+          } catch { }
         }
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -1161,7 +1161,7 @@ async function streamGateway(
               ],
             };
             controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch {}
+          } catch { }
         }
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -1235,14 +1235,14 @@ async function streamGateway(
                 ],
               };
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-            } catch {}
+            } catch { }
           }
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
         return;
       }
-    } catch (nabhErr) {}
+    } catch (nabhErr) { }
   }
 
   // ── Engine 3: FreeModels Edge Cluster Fallback ──
@@ -1306,14 +1306,14 @@ async function streamGateway(
               ],
             };
             controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch {}
+          } catch { }
         }
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       controller.close();
       return;
     }
-  } catch (fmErr) {}
+  } catch (fmErr) { }
 
   clearInterval(pingInterval);
   controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -1619,7 +1619,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           }, { headers: CORS_HEADERS });
         }
       }
-    } catch {}
+    } catch { }
 
     // 1B. Requesty High-Performance Gateway (Active Verified Key)
     try {
@@ -1668,7 +1668,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           }, { headers: CORS_HEADERS });
         }
       }
-    } catch {}
+    } catch { }
 
     // 2. High-Speed Secondary Cluster (Nabh Cloud)
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1708,7 +1708,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             }, { status: 200, headers: CORS_HEADERS });
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // 2. Fallback to TokenJuice

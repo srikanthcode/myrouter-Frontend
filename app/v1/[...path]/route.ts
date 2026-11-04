@@ -55,6 +55,7 @@ const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-
 export function getGatewayKeyPool(): string[] {
   const envVal = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || process.env.PROROUTER_GATEWAY_KEYS || "";
   const fallbackPool = [
+    "tj_wDD1O7w37-Ha7n12b7GhuNgt-kjVCsm7TKysxCwq8_w",
     "tj_llvqgvMUMVg5SKOynVBtBqDJp2J566mapFE9KNPAVqE",
     "tj_mbQStnVQZo7aV70jSdb5T3L1rSs4vmtKvVuPdYMsxCs",
     "tj_XvoBmNCcszDFBbOtvS-D62oDXEEO7OEIqd9rzhfxZX8",

@@ -519,7 +519,8 @@ export default function ChatPage() {
               </div>
 
               {/* Instant Search Filter */}
-              <div className="relative hidden md:block">
+              <span className="hidden xl:inline-flex items-center rounded-full bg-accent/10 border border-accent/30 px-2 py-0.5 font-mono text-[10px] text-accent font-medium">500+ Models</span>
+              <div className="relative hidden sm:block">
                 <Search className="pointer-events-none absolute left-2 top-2 size-3 text-mut" />
                 <input
                   type="text"
@@ -601,6 +602,38 @@ export default function ChatPage() {
                           {s.title}
                         </button>
                       ))}
+                    </div>
+
+                    {/* Quick popular model switcher pills */}
+                    <div className="mt-3.5 pt-3 border-t border-line/60">
+                      <div className="text-[10px] font-medium text-mut2 mb-1.5 font-mono uppercase tracking-wider">
+                        Popular Models (500+ Available in Header Selector):
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-1.5">
+                        {[
+                          { name: "Pro Router Zenith", slug: "pr-zenith" },
+                          { name: "Claude Sonnet", slug: "claude-sonnet" },
+                          { name: "GPT-4o", slug: "gpt-4o" },
+                          { name: "DeepSeek Flash", slug: "deepseek-v4.1-flash-1017" },
+                          { name: "Kimi K2.7 Code", slug: "kimi-k2.7-code" },
+                          { name: "Qwen 2.5 Coder", slug: "qwen-2.5-coder-32b-instruct" },
+                          { name: "Llama 3.3 70B", slug: "meta-llama/llama-3.3-70b-instruct" },
+                        ].map((item) => (
+                          <button
+                            key={item.slug}
+                            type="button"
+                            onClick={() => setModel(item.slug)}
+                            className={cx(
+                              "cursor-pointer rounded-md border px-2 py-0.5 text-[10.5px] font-medium transition-colors",
+                              model === item.slug
+                                ? "border-accent bg-accent/20 text-accent font-semibold"
+                                : "border-line bg-ink2/60 text-mut hover:border-line2 hover:text-fg"
+                            )}
+                          >
+                            {item.name}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -807,6 +840,11 @@ export default function ChatPage() {
                           ${selectedModelMeta.inputPer1M.toFixed(2)} / ${selectedModelMeta.outputPer1M.toFixed(2)}
                         </span>
                       </div>
+                    </div>
+                    <div className="mt-2 text-center">
+                      <Link href="/models" className="inline-flex items-center gap-1 text-[10px] font-mono text-accent hover:underline">
+                        Browse all 500+ models in Directory →
+                      </Link>
                     </div>
                   </div>
 

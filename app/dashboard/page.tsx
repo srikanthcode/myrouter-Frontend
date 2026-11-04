@@ -86,10 +86,13 @@ export default function DashboardOverviewPage() {
     }
 
     loadData();
-    const interval = setInterval(loadData, 10000); // 10s live poll
+    const interval = setInterval(loadData, 3000); // 3s real-time poll
+    const onFocus = () => void loadData();
+    window.addEventListener("focus", onFocus);
     return () => {
       isCancelled = true;
       clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
     };
   }, [refresh, selectedTimeFilter, selectedModelFilter]);
 

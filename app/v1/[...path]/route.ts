@@ -196,6 +196,51 @@ export interface ModelEntry {
 import { ALL_MODELS_500 } from "@/lib/model-profiles-data";
 
 export const ALL_MODELS: ModelEntry[] = [
+  // ── 0. 48-Hour Promotional Free Frontier Models ──
+  {
+    id: "deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    object: "model",
+    created: 1710000000,
+    owned_by: "DeepSeek",
+    category: "Reasoning and Frontier",
+    tier: "Frontier",
+    description: "DeepSeek V4.1 Flash high-speed inference engine with 128k context. Free for 48 hours.",
+    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+  },
+  {
+    id: "deepseek-v4.1-flash-1017",
+    name: "DeepSeek V4.1 Flash 1017",
+    object: "model",
+    created: 1710000000,
+    owned_by: "DeepSeek",
+    category: "Reasoning and Frontier",
+    tier: "Frontier",
+    description: "DeepSeek V4.1 Flash 1017 build for deep reasoning and code completion. Free for 48 hours.",
+    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+  },
+  {
+    id: "qwen3.8-27b",
+    name: "Qwen 3.8 27B",
+    object: "model",
+    created: 1710000000,
+    owned_by: "Alibaba Cloud",
+    category: "General Intelligence",
+    tier: "Frontier",
+    description: "Alibaba Cloud Qwen 3.8 27B open frontier model with 128k context. Free for 48 hours.",
+    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+  },
+  {
+    id: "qwen-2.5-coder-32b",
+    name: "Qwen 2.5 Coder 32B",
+    object: "model",
+    created: 1710000000,
+    owned_by: "Alibaba Cloud",
+    category: "Coding and Software Engineering",
+    tier: "Frontier",
+    description: "Alibaba Cloud Qwen 2.5 Coder 32B specialized coding model with 128k context. Free for 48 hours.",
+    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+  },
   ...ALL_MODELS_500,
   // ── 1. Official Pro Router Tiered Models (Routed to FreeModels Pro) ──
   {
@@ -789,6 +834,80 @@ const CORS_HEADERS = {
 
 // ── Clean all asterisks (*) from text so AI replies never show * ──
 // ── Clean model identity so ProRouter models NEVER leak upstream provider personas ──
+export function resolveModelMetadata(modelId: string): { name: string; owner: string; category: string } {
+  const mLower = (modelId || "").toLowerCase();
+
+  // 1. Check if explicitly in ALL_MODELS with non-prorouter owner
+  const found = ALL_MODELS.find((m) => m.id.toLowerCase() === mLower);
+  if (found && found.owned_by && found.owned_by.toLowerCase() !== "prorouter") {
+    let owner = found.owned_by;
+    if (owner.toLowerCase() === "alibaba") owner = "Alibaba Cloud";
+    if (owner.toLowerCase() === "openai") owner = "OpenAI";
+    if (owner.toLowerCase() === "anthropic") owner = "Anthropic";
+    if (owner.toLowerCase() === "google") owner = "Google";
+    if (owner.toLowerCase() === "meta") owner = "Meta";
+    if (owner.toLowerCase() === "mistral") owner = "Mistral AI";
+    if (owner.toLowerCase() === "moonshot") owner = "Moonshot AI";
+    if (owner.toLowerCase() === "deepseek") owner = "DeepSeek";
+    return { name: found.name || modelId, owner, category: found.category || "General" };
+  }
+
+  // 2. Intelligent inference from model ID
+  if (mLower.includes("deepseek")) {
+    const is1017 = mLower.includes("1017");
+    return { name: is1017 ? "DeepSeek V4.1 Flash 1017" : "DeepSeek V4.1 Flash", owner: "DeepSeek", category: "Reasoning and Frontier" };
+  }
+  if (mLower.includes("qwen")) {
+    let name = "Qwen";
+    if (mLower.includes("2.5-coder-32b")) name = "Qwen 2.5 Coder 32B";
+    else if (mLower.includes("3.8-27b")) name = "Qwen 3.8 27B";
+    else if (mLower.includes("coder")) name = "Qwen Coder";
+    else if (found?.name) name = found.name;
+    return { name, owner: "Alibaba Cloud", category: "Coding and Software Engineering" };
+  }
+  if (mLower.includes("claude")) {
+    let name = "Claude";
+    if (mLower.includes("sonnet")) name = "Claude Sonnet";
+    else if (mLower.includes("opus")) name = "Claude Opus";
+    else if (mLower.includes("haiku")) name = "Claude Haiku";
+    else if (found?.name) name = found.name;
+    return { name, owner: "Anthropic", category: "Frontier Intelligence" };
+  }
+  if (mLower.includes("gpt") || mLower.startsWith("o1") || mLower.startsWith("o3") || mLower.startsWith("o4")) {
+    return { name: found?.name || modelId.toUpperCase(), owner: "OpenAI", category: "Frontier Intelligence" };
+  }
+  if (mLower.includes("gemini") || mLower.includes("gemma")) {
+    return { name: found?.name || "Gemini", owner: "Google", category: "Multimodal Intelligence" };
+  }
+  if (mLower.includes("llama")) {
+    return { name: found?.name || "Llama", owner: "Meta", category: "Open Weights" };
+  }
+  if (mLower.includes("mistral") || mLower.includes("codestral") || mLower.includes("mixtral") || mLower.includes("leanstral")) {
+    return { name: found?.name || "Mistral", owner: "Mistral AI", category: "General Intelligence" };
+  }
+  if (mLower.includes("kimi") || mLower.includes("moonshot")) {
+    return { name: found?.name || "Kimi", owner: "Moonshot AI", category: "Long Context" };
+  }
+  if (mLower.includes("grok")) {
+    return { name: found?.name || "Grok", owner: "xAI", category: "Frontier Reasoning" };
+  }
+  if (mLower.includes("nemotron") || mLower.includes("nvidia")) {
+    return { name: found?.name || "Nemotron", owner: "NVIDIA", category: "Enterprise AI" };
+  }
+  if (mLower.includes("glm") || mLower.includes("chatglm") || mLower.includes("zhipu")) {
+    return { name: found?.name || "GLM", owner: "Zhipu AI", category: "Bilingual Intelligence" };
+  }
+  if (mLower.startsWith("pr-") || mLower.startsWith("pr_") || mLower.includes("prorouter")) {
+    return { name: found?.name || "Pro Router", owner: "ProRouter", category: "Pro Router Tiered" };
+  }
+
+  return {
+    name: found?.name || modelId,
+    owner: found?.owned_by || "AI",
+    category: found?.category || "General",
+  };
+}
+
 export function sanitizeModelIdentity(text: string, modelName: string, ownerName?: string): string {
   if (!text) return text;
   let res = text;
@@ -1196,18 +1315,16 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         ((m as { role?: string }).role === "system" || (m as { role?: string }).role === "developer")
     );
 
-    const activeMeta = ALL_MODELS.find(
-      (m) => m.id.toLowerCase() === requestedRawModel.toLowerCase()
-    );
-    const modelDisplayName = activeMeta ? activeMeta.name : requestedRawModel;
-    const ownerName = activeMeta?.owned_by;
+    const resolvedMeta = resolveModelMetadata(requestedRawModel);
+    const modelDisplayName = resolvedMeta.name;
+    const ownerName = resolvedMeta.owner;
     const isDeepSeek = requestedRawModel.toLowerCase().includes("deepseek");
 
     const shouldCleanAsterisks = !hasSystemMessage;
     let effectiveMessages = incomingMessages;
     if (!hasSystemMessage) {
-      const isProRouter = !ownerName || ownerName.toLowerCase() === "prorouter";
-      const modelOwner = isProRouter ? "developed by ProRouter" : (ownerName ? ("developed by " + ownerName) : "an advanced AI system");
+      const isProRouter = ownerName.toLowerCase() === "prorouter";
+      const modelOwner = isProRouter ? "developed by ProRouter" : ("developed by " + ownerName);
 
       let identityDirective = "";
       if (isDeepSeek) {

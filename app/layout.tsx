@@ -114,7 +114,7 @@ const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "ProRouter",
-  alternateName: ["Pro Router", "ProRouter AI", "prorouter.in"],
+  alternateName: ["prorouter", "ProRouter", "Pro Router", "ProRouter AI", "prorouter.in", "www.prorouter.in"],
   url: "https://www.prorouter.in",
   logo: "https://www.prorouter.in/icon.svg",
   description:
@@ -131,7 +131,7 @@ const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "ProRouter",
-  alternateName: ["Pro Router", "ProRouter AI"],
+  alternateName: ["prorouter", "ProRouter", "Pro Router", "ProRouter AI"],
   url: "https://www.prorouter.in",
   potentialAction: {
     "@type": "SearchAction",

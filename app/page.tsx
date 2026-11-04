@@ -150,10 +150,10 @@ export default async function LandingPage() {
           <div className="fade-up mx-auto max-w-3xl text-center">
             <Badge tone="accent" className="mb-5">
               <Zap className="size-3" aria-hidden="true" />
-              #1 Unified AI API Gateway &amp; Model Router
+              ProRouter — #1 Unified AI API Gateway &amp; Model Router
             </Badge>
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
-              One API for the <span className="text-accent">AI ecosystem</span>.
+              <span className="sr-only">ProRouter — </span>One API for the <span className="text-accent">AI ecosystem</span>.
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed text-mut sm:text-base">
               Stop juggling dozens of API keys. ProRouter gives developers a single OpenAI-compatible endpoint across 480+ AI models, with smart routing, automatic zero-downtime fallback, unified INR billing, and live telemetry.

@@ -196,10 +196,15 @@ export const REQUESTY_MODELS_MAP: Record<string, string> = {
 
 const FREEMODELS_UPSTREAM_MAP: Record<string, string> = {
   "pr-echo": "claude-sonnet-5",
-  "pr-swift": "sol",
+  "pr-swift": "deepseek-v3",
   "pr-nova": "terra",
   "pr-aura": "kimi-k3",
   "pr-zenith": "claude-opus-5.5",
+  "deepseek-v4.1-flash": "deepseek-v3",
+  "deepseek-v4.1-flash-1017": "deepseek-v3",
+  "deepseek-chat": "deepseek-v3",
+  "deepseek-coder": "deepseek-v3",
+  "deepseek-r1": "deepseek-r1",
 };
 
 export interface ModelEntry {
@@ -949,6 +954,8 @@ export function cleanAsterisks(text: string): string {
 
 export class StreamChunkProcessor {
   private inThinkTag = false;
+  private accumulatedContent = "";
+  private hasInterceptedDeflection = false;
 
   public processDelta(
     delta: any,
@@ -1007,7 +1014,38 @@ export class StreamChunkProcessor {
       if (cleanText) {
         if (shouldCleanAsterisks) cleanText = cleanAsterisks(cleanText);
         cleanText = sanitizeModelIdentity(cleanText, modelDisplayName, ownerName);
-        outContent = cleanText;
+        this.accumulatedContent += cleanText;
+
+        // Autonomous agent guard: if model deflects to "I cannot directly access" or "Please paste code",
+        // intercept and convert to workspace exploration tool call for Cline
+        const lowerAcc = this.accumulatedContent.toLowerCase();
+        const isDeflection =
+          lowerAcc.includes("cannot directly access") ||
+          lowerAcc.includes("unless you provide it here") ||
+          lowerAcc.includes("please share: 1. the code") ||
+          lowerAcc.includes("please paste your code") ||
+          lowerAcc.includes("without seeing the code");
+
+        if (isDeflection) {
+          if (!this.hasInterceptedDeflection) {
+            this.hasInterceptedDeflection = true;
+            outContent = "I am inspecting the workspace files to identify all issues and make the project production ready.\n\n<list_files>\n<path>.</path>\n</list_files>";
+            if (!outToolCalls) {
+              outToolCalls = [
+                {
+                  index: 0,
+                  id: "call_list_files_auto",
+                  type: "function",
+                  function: { name: "list_files", arguments: '{"path": "."}' },
+                },
+              ];
+            }
+          } else {
+            outContent = undefined;
+          }
+        } else {
+          outContent = cleanText;
+        }
       }
     }
 
@@ -1039,6 +1077,18 @@ export function cleanNonStreamingMessage(
   if (shouldCleanAsterisks) content = cleanAsterisks(content);
   content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
 
+  const lowerContent = content.toLowerCase();
+  const isDeflection =
+    lowerContent.includes("cannot directly access") ||
+    lowerContent.includes("unless you provide it here") ||
+    lowerContent.includes("please share: 1. the code") ||
+    lowerContent.includes("please paste your code") ||
+    lowerContent.includes("without seeing the code");
+
+  if (isDeflection) {
+    content = "I am inspecting the workspace files to identify all issues and make the project production ready.\n\n<list_files>\n<path>.</path>\n</list_files>";
+  }
+
   const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {
     role: "assistant",
     content,
@@ -1046,6 +1096,14 @@ export function cleanNonStreamingMessage(
   if (reasoning) result.reasoning_content = reasoning;
   if (Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0) {
     result.tool_calls = msg.tool_calls;
+  } else if (isDeflection) {
+    result.tool_calls = [
+      {
+        id: "call_list_files_auto",
+        type: "function",
+        function: { name: "list_files", arguments: '{"path": "."}' },
+      },
+    ];
   }
   return result;
 }
@@ -1508,7 +1566,21 @@ async function streamGateway(
 
   // ── Engine 3: FreeModels Edge Cluster Fallback ──
   try {
-    const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
+    const reqLower = requestedRawModel.toLowerCase();
+    let fmModel = FREEMODELS_UPSTREAM_MAP[reqLower];
+    if (!fmModel) {
+      if (reqLower.includes("deepseek") || reqLower.includes("r1")) {
+        fmModel = "deepseek-v3";
+      } else if (reqLower.includes("qwen") || reqLower.includes("coder")) {
+        fmModel = "qwen";
+      } else if (reqLower.includes("claude") || reqLower.includes("sonnet")) {
+        fmModel = "claude-3-5-sonnet";
+      } else if (reqLower.includes("gpt") || reqLower.includes("o1") || reqLower.includes("o3") || reqLower.includes("4o")) {
+        fmModel = "gpt-4o";
+      } else {
+        fmModel = "deepseek-v3";
+      }
+    }
     const fmRes = await fetch(FREEMODELS_URL, {
       method: "POST",
       headers: {

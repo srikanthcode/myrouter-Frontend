@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check, Copy, HelpCircle, Key, ShieldCheck, UserCheck } from "lucide-react";
 import { ApiError, api, formatINR } from "@/lib/api";
 import { Badge, Button, Card, Input, Skeleton, useToast } from "@/components/ui";
-import { useSession } from "@/components/DashboardShell";
+import { useSession, getDeterministicAccountNumber, getDeterministicUserId } from "@/components/DashboardShell";
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -18,6 +18,16 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyVal = async (field: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast.push(`Copied ${field} to clipboard`, "success");
+      setTimeout(() => setCopiedField(null), 1800);
+    } catch {}
+  };
 
   useEffect(() => {
     if (me) setName(me.user.name ?? "");
@@ -66,6 +76,95 @@ export default function SettingsPage() {
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Settings</h1>
         <p className="mt-1 text-[13.5px] text-mut">Manage your profile, password and account.</p>
       </div>
+
+      {/* Account Identity & Permanent Support Credentials */}
+      <Card className="border-accent/40 bg-gradient-to-br from-panel via-panel to-accent/[0.04]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-line px-5 py-3.5 gap-2">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="size-4.5 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold text-fg">Account Identity &amp; Support Credentials</h2>
+              <p className="text-[12px] text-mut">Permanent system identifiers for real-time support, issue resolution, and segregated billing.</p>
+            </div>
+          </div>
+          <Badge tone="accent">Production Verified</Badge>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Account Number Card */}
+            <div className="rounded-xl border border-line bg-ink2/70 p-4 transition-colors hover:border-accent/50">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-mut2">Account Number</span>
+                <span className="rounded bg-accent/10 border border-accent/25 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-accent">
+                  Institutional Account #
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="font-mono text-base font-semibold tracking-wider text-fg sm:text-lg">
+                  {me.user.accountNumber || getDeterministicAccountNumber(me.user.email)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyVal("Account Number", me.user.accountNumber || getDeterministicAccountNumber(me.user.email))}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-panel2/80 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
+                  title="Copy Account Number"
+                >
+                  {copiedField === "Account Number" ? (
+                    <>
+                      <Check className="size-3.5 text-good" />
+                      <span className="text-good font-semibold">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3.5 text-mut" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-mut2">
+                Quote this identifier to ProRouter Technical Support to quickly trace requests, resolve billing issues, or debug specific model routing.
+              </p>
+            </div>
+
+            {/* Primary User UUID Card */}
+            <div className="rounded-xl border border-line bg-ink2/70 p-4 transition-colors hover:border-accent/50">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-mut2">Primary User ID</span>
+                <span className="rounded bg-white/[0.05] border border-line px-1.5 py-0.5 font-mono text-[10px] text-mut">
+                  Primary UUID
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="font-mono text-sm font-semibold tracking-wide text-fg/90 truncate sm:text-base">
+                  {me.user.id || getDeterministicUserId(me.user.email)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyVal("User ID", me.user.id || getDeterministicUserId(me.user.email))}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-panel2/80 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
+                  title="Copy User ID"
+                >
+                  {copiedField === "User ID" ? (
+                    <>
+                      <Check className="size-3.5 text-good" />
+                      <span className="text-good font-semibold">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3.5 text-mut" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-mut2">
+                Canonical deterministic account identifier attached to your API keys, rate limiters, and real-time usage telemetry streams.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* Account summary */}
       <Card>

@@ -34,8 +34,11 @@ import {
   calculateSellingPrice,
 } from "@pro/shared";
 
+import { getDeterministicAccountNumber, getDeterministicUserId } from "@/components/DashboardShell";
+
 interface AdminUser {
   id: string;
+  accountNumber: string;
   email: string;
   name: string;
   role: string;
@@ -64,7 +67,8 @@ export default function AdminPage() {
   // Users Mock/Live
   const [usersList, setUsersList] = useState<AdminUser[]>([
     {
-      id: "usr_admin",
+      id: me?.user?.id || getDeterministicUserId(me?.user?.email || "admin@prorouter.in"),
+      accountNumber: me?.user?.accountNumber || getDeterministicAccountNumber(me?.user?.email || "admin@prorouter.in"),
       email: me?.user?.email || "admin@prorouter.in",
       name: me?.user?.name || "Administrator",
       role: "admin",
@@ -74,7 +78,8 @@ export default function AdminPage() {
       createdAt: new Date().toISOString(),
     },
     {
-      id: "usr_102",
+      id: getDeterministicUserId("developer.demo@gmail.com"),
+      accountNumber: getDeterministicAccountNumber("developer.demo@gmail.com"),
       email: "developer.demo@gmail.com",
       name: "Demo Developer",
       role: "user",
@@ -84,7 +89,8 @@ export default function AdminPage() {
       createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     },
     {
-      id: "usr_103",
+      id: getDeterministicUserId("startup.founder@gmail.com"),
+      accountNumber: getDeterministicAccountNumber("startup.founder@gmail.com"),
       email: "startup.founder@gmail.com",
       name: "AI Startup",
       role: "user",
@@ -104,7 +110,13 @@ export default function AdminPage() {
     api<{ users?: AdminUser[] }>("/admin/users")
       .then((res) => {
         if (res && Array.isArray(res.users)) {
-          setUsersList(res.users);
+          setUsersList(
+            res.users.map((u) => ({
+              ...u,
+              id: u.id || getDeterministicUserId(u.email),
+              accountNumber: u.accountNumber || getDeterministicAccountNumber(u.email),
+            }))
+          );
         }
       })
       .catch(() => {})
@@ -449,7 +461,7 @@ export default function AdminPage() {
               <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-mut" />
               <input
                 type="search"
-                placeholder="Search registered users by email or name..."
+                placeholder="Search users by Account #, User ID, email, or name..."
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
                 className="w-full rounded-lg border border-line bg-panel pl-9 pr-3 py-2 text-xs text-fg placeholder:text-mut2 focus:border-accent focus:outline-none"
@@ -461,7 +473,8 @@ export default function AdminPage() {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-line text-[11px] uppercase tracking-wide text-mut2">
                 <tr>
-                  <th className="py-2.5 px-3">User</th>
+                  <th className="py-2.5 px-3">Account &amp; User</th>
+                  <th className="py-2.5 px-3 font-mono">Account # / ID</th>
                   <th className="py-2.5 px-3">Role</th>
                   <th className="py-2.5 px-3 font-mono">Wallet Balance</th>
                   <th className="py-2.5 px-3">Plan</th>
@@ -470,37 +483,52 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/60">
-                {usersList.map((user) => (
-                  <tr key={user.id} className="hover:bg-white/[0.02]">
-                    <td className="py-2.5 px-3">
-                      <div className="font-medium text-fg">{user.name}</div>
-                      <div className="font-mono text-[10px] text-mut">{user.email}</div>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <Badge tone={user.role === "admin" ? "accent" : "neutral"}>
-                        {user.role}
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-accent font-semibold">
-                      {formatINR(user.balancePaise)}
-                    </td>
-                    <td className="py-2.5 px-3 text-mut uppercase">{user.plan}</td>
-                    <td className="py-2.5 px-3">
-                      <Badge tone={user.status === "active" ? "good" : "bad"}>
-                        {user.status}
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <Button
-                        size="sm"
-                        onClick={() => setSelectedUser(user)}
-                        className="text-xs"
-                      >
-                        Adjust Credits
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {usersList
+                  .filter((u) => {
+                    const q = userSearch.toLowerCase().trim();
+                    if (!q) return true;
+                    return (
+                      u.name.toLowerCase().includes(q) ||
+                      u.email.toLowerCase().includes(q) ||
+                      u.accountNumber.toLowerCase().includes(q) ||
+                      u.id.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((user) => (
+                    <tr key={user.id} className="hover:bg-white/[0.02]">
+                      <td className="py-2.5 px-3">
+                        <div className="font-medium text-fg">{user.name}</div>
+                        <div className="font-mono text-[10px] text-mut">{user.email}</div>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono">
+                        <div className="font-semibold text-accent">{user.accountNumber}</div>
+                        <div className="text-[10px] text-mut2">{user.id}</div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge tone={user.role === "admin" ? "accent" : "neutral"}>
+                          {user.role}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-accent font-semibold">
+                        {formatINR(user.balancePaise)}
+                      </td>
+                      <td className="py-2.5 px-3 text-mut uppercase">{user.plan}</td>
+                      <td className="py-2.5 px-3">
+                        <Badge tone={user.status === "active" ? "good" : "bad"}>
+                          {user.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedUser(user)}
+                          className="text-xs"
+                        >
+                          Adjust Credits
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </Card>
@@ -511,11 +539,25 @@ export default function AdminPage() {
               <div className="w-full max-w-md rounded-2xl border border-line bg-panel p-6 shadow-2xl space-y-4">
                 <div className="flex items-center gap-2 text-accent">
                   <Wallet className="size-5" />
-                  <h2 className="text-base font-semibold text-fg">Adjust User Credits</h2>
+                  <h2 className="text-base font-semibold text-fg">Adjust User Credits &amp; Diagnostics</h2>
                 </div>
-                <div className="rounded-lg border border-line bg-panel2/60 p-3 space-y-1 text-xs">
-                  <div className="text-mut">Account: <strong className="text-fg">{selectedUser.email}</strong></div>
-                  <div className="text-mut">Current Balance: <strong className="text-accent font-mono">{formatINR(selectedUser.balancePaise)}</strong></div>
+                <div className="rounded-lg border border-line bg-panel2/60 p-3 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between text-mut">
+                    <span>Account Number:</span>
+                    <strong className="font-mono text-accent font-semibold">{selectedUser.accountNumber}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-mut">
+                    <span>User UUID:</span>
+                    <strong className="font-mono text-fg">{selectedUser.id}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-mut">
+                    <span>Email:</span>
+                    <strong className="text-fg">{selectedUser.email}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-mut border-t border-line/60 pt-1">
+                    <span>Current Balance:</span>
+                    <strong className="text-accent font-mono font-semibold">{formatINR(selectedUser.balancePaise)}</strong>
+                  </div>
                 </div>
 
                 <div className="space-y-3">

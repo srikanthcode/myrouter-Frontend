@@ -52,12 +52,38 @@ import { NextRequest, NextResponse } from "next/server";
 import { Buffer } from "node:buffer";
 import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from "./server-api";
 
-interface SessionUser {
+export function generateDeterministicUserId(identifier: string): string {
+  const clean = (identifier || "").trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const hex = Math.abs(hash).toString(16).padStart(8, "0");
+  return `usr_pr_${hex}`;
+}
+
+export function generateDeterministicAccountNumber(identifier: string): string {
+  const clean = (identifier || "").trim().toLowerCase();
+  let hash1 = 5381;
+  let hash2 = 52711;
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = (hash1 * 33) ^ char;
+    hash2 = (hash2 * 33) ^ char;
+  }
+  const part1 = (Math.abs(hash1) % 9000 + 1000).toString();
+  const part2 = (Math.abs(hash2) % 9000 + 1000).toString();
+  return `PR-ACC-${part1}-${part2}`;
+}
+
+export interface SessionUser {
   id: string;
   email: string;
   name: string;
   role: string;
   status: string;
+  accountNumber: string;
 }
 
 function parseSessionCookie(req: NextRequest): SessionUser | null {
@@ -67,12 +93,16 @@ function parseSessionCookie(req: NextRequest): SessionUser | null {
     const raw = Buffer.from(cookie, "base64url").toString("utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.email === "string") {
+      const email = parsed.email.toLowerCase();
+      const id = parsed.id && parsed.id.startsWith("usr_pr_") ? parsed.id : generateDeterministicUserId(email);
+      const accountNumber = parsed.accountNumber || generateDeterministicAccountNumber(email);
       return {
-        id: parsed.id || "usr_" + Math.random().toString(36).slice(2, 10),
-        email: parsed.email,
-        name: parsed.name || parsed.email.split("@")[0],
+        id,
+        email,
+        name: parsed.name || email.split("@")[0],
         role: parsed.role || "user",
         status: "active",
+        accountNumber,
       };
     }
   } catch {
@@ -81,12 +111,16 @@ function parseSessionCookie(req: NextRequest): SessionUser | null {
   return null;
 }
 
-function createSessionCookie(user: { id?: string; email: string; name?: string; role?: string }): string {
+function createSessionCookie(user: { id?: string; email: string; name?: string; role?: string; accountNumber?: string }): string {
+  const email = user.email.toLowerCase();
+  const id = user.id && user.id.startsWith("usr_pr_") ? user.id : generateDeterministicUserId(email);
+  const accountNumber = user.accountNumber || generateDeterministicAccountNumber(email);
   const payload = {
-    id: user.id || "usr_" + Math.random().toString(36).slice(2, 10),
-    email: user.email.toLowerCase(),
-    name: user.name || user.email.split("@")[0],
+    id,
+    email,
+    name: user.name || email.split("@")[0],
     role: user.role || "user",
+    accountNumber,
     iat: Date.now(),
   };
   return Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -110,11 +144,12 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
     const user = {
-      id: "usr_" + Math.random().toString(36).slice(2, 10),
+      id: generateDeterministicUserId(email),
       email,
       name,
       role: "user",
       status: "active",
+      accountNumber: generateDeterministicAccountNumber(email),
     };
     const token = createSessionCookie(user);
     const res = NextResponse.json({ user }, { status: 201 });
@@ -141,11 +176,12 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
     const user = {
-      id: "usr_" + Math.random().toString(36).slice(2, 10),
+      id: generateDeterministicUserId(email),
       email,
       name: email.split("@")[0],
       role: "user",
       status: "active",
+      accountNumber: generateDeterministicAccountNumber(email),
     };
     const token = createSessionCookie(user);
     const res = NextResponse.json({ user }, { status: 200 });
@@ -450,7 +486,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     let body: Record<string, any> = {};
     try {
       body = (await req.json()) || {};
-    } catch {}
+    } catch { }
 
     interface GatewayPackage {
       priceMinor: number;
@@ -543,7 +579,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     let body: Record<string, any> = {};
     try {
       body = (await req.json()) || {};
-    } catch {}
+    } catch { }
 
     const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = body;
     if (razorpayPaymentId && razorpayOrderId && razorpaySignature) {
@@ -730,7 +766,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     });
   }
 
-    // ── Keys Management Fallback ──
+  // ── Keys Management Fallback ──
   if (subpath === "/keys" && method === "GET") {
     return NextResponse.json({
       items: [
@@ -753,7 +789,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
 
   if (subpath === "/keys" && method === "POST") {
     let body: Record<string, any> = {};
-    try { body = await req.json(); } catch {}
+    try { body = await req.json(); } catch { }
     const keyName = body.name || "Production Key";
     const randPart = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
     const secret = "pro_sk_live_" + randPart;

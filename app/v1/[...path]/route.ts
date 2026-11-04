@@ -914,25 +914,30 @@ export function sanitizeModelIdentity(text: string, modelName: string, ownerName
   const targetOwner = ownerName || "AI";
   const modelLower = modelName.toLowerCase();
   const isDeepSeek = modelLower.includes("deepseek");
-  const isChatGPT = modelLower.includes("chatgpt") || modelLower === "gpt-4o" || modelLower.includes("gpt-");
+  const isExplicitChatGPT = modelLower === "chatgpt" || modelLower === "chatgpt-4o" || modelLower === "chatgpt-plus";
   const isKimi = modelLower.includes("kimi");
 
-  // 1. Remove ChatGPT/OpenAI leaks when the user is NOT explicitly querying a ChatGPT model
-  if (!isChatGPT) {
-    res = res.replace(/I'm\s+ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion|[\s,.-]+a\s+large\s+language\s+model|[\s,.-]+an\s+AI\s+assistant)?/gi, "I'm " + modelName);
-    res = res.replace(/I\s+am\s+ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion|[\s,.-]+a\s+large\s+language\s+model|[\s,.-]+an\s+AI\s+assistant)?/gi, "I am " + modelName);
-    res = res.replace(/ChatGPT/gi, modelName);
+  // 1. Remove generic ChatGPT / OpenAI leaks whenever the model isn't specifically the standalone ChatGPT product
+  if (!isExplicitChatGPT) {
+    // Match straight apostrophe (') or curly apostrophe (’)
+    res = res.replace(/I['’]m\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I\s+am\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I am " + modelName + ", ");
+    res = res.replace(/ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion)/gi, modelName);
+    res = res.replace(/your\s+AI\s+coding\s+companion/gi, "your AI assistant");
+    res = res.replace(/\bChatGPT\b/g, modelName);
     res = res.replace(/developed\s+by\s+OpenAI/gi, "developed by " + targetOwner);
     res = res.replace(/by\s+OpenAI/gi, "by " + targetOwner);
     res = res.replace(/OpenAI\s+language\s+model/gi, modelName + " language model");
-    res = res.replace(/\bOpenAI\b/gi, targetOwner);
+    if (!modelLower.includes("openai") && !modelLower.includes("gpt-")) {
+      res = res.replace(/\bOpenAI\b/gi, targetOwner);
+    }
   }
 
   // 2. Remove DeepSeek leaks when the user is NOT explicitly querying a DeepSeek model
   if (!isDeepSeek) {
     res = res.replace(/developed\s+by\s+DeepSeek(?:\s+AI)?/gi, "developed by " + targetOwner);
     res = res.replace(/by\s+DeepSeek(?:\s+AI)?/gi, "by " + targetOwner);
-    res = res.replace(/I'm\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I['’]m\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I'm " + modelName + ", ");
     res = res.replace(/I\s+am\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I am " + modelName + ", ");
     res = res.replace(/DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, modelName);
   }
@@ -942,9 +947,9 @@ export function sanitizeModelIdentity(text: string, modelName: string, ownerName
     res = res.replace(/Kimi\s*K3\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
     res = res.replace(/Kimi\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
     res = res.replace(/Moonshot\s*AI/gi, targetOwner);
-    res = res.replace(/I'm\s+Kimi\s*K3/gi, "I'm " + modelName);
+    res = res.replace(/I['’]m\s+Kimi\s*K3/gi, "I'm " + modelName);
     res = res.replace(/I\s+am\s+Kimi\s*K3/gi, "I am " + modelName);
-    res = res.replace(/I'm\s+Kimi/gi, "I'm " + modelName);
+    res = res.replace(/I['’]m\s+Kimi/gi, "I'm " + modelName);
     res = res.replace(/I\s+am\s+Kimi/gi, "I am " + modelName);
   }
 
@@ -1320,24 +1325,36 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const ownerName = resolvedMeta.owner;
     const isDeepSeek = requestedRawModel.toLowerCase().includes("deepseek");
 
-    const shouldCleanAsterisks = !hasSystemMessage;
-    let effectiveMessages = incomingMessages;
+    const shouldCleanAsterisks = true;
+    const isProRouter = ownerName.toLowerCase() === "prorouter";
+    const modelOwner = isProRouter ? "developed by ProRouter" : ("developed by " + ownerName);
+
+    let identityDirective = "";
+    if (isDeepSeek) {
+      identityDirective = "You are DeepSeek (" + modelDisplayName + "), developed by DeepSeek. When asked about your name, identity, or creators, introduce yourself proudly as DeepSeek (" + modelDisplayName + ").";
+    } else {
+      identityDirective = "You are " + modelDisplayName + ", " + modelOwner + ". When asked about your name, identity, or creators, introduce yourself authentically as " + modelDisplayName + " (" + modelOwner + "). STRICT RULE: Absolutely NEVER say you are ChatGPT, OpenAI, or DeepSeek. You must strictly speak and act as " + modelDisplayName + ".";
+    }
+
+    const formattingDirective = " STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points use hyphens (-). Keep all text 100% completely free of asterisks (*).";
+    const fullDirective = identityDirective + " Respond directly, helpfully, and professionally in the authentic voice and specialized domain of " + modelDisplayName + "." + formattingDirective;
+
+    let effectiveMessages: unknown[] = [];
     if (!hasSystemMessage) {
-      const isProRouter = ownerName.toLowerCase() === "prorouter";
-      const modelOwner = isProRouter ? "developed by ProRouter" : ("developed by " + ownerName);
-
-      let identityDirective = "";
-      if (isDeepSeek) {
-        identityDirective = "You are DeepSeek (" + modelDisplayName + "), developed by DeepSeek. When asked about your name, identity, or creators, introduce yourself proudly as DeepSeek (" + modelDisplayName + ").";
-      } else {
-        identityDirective = "You are " + modelDisplayName + ", " + modelOwner + ". When asked about your name, identity, or creators, introduce yourself authentically as " + modelDisplayName + " (" + modelOwner + "). STRICT RULE: Absolutely NEVER say you are ChatGPT, OpenAI, or DeepSeek. You must strictly speak and act as " + modelDisplayName + ".";
-      }
-
-      const systemPrompt = identityDirective + " Respond directly, helpfully, and professionally in the authentic voice and specialized domain of " + modelDisplayName + ". STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points use hyphens (-). Keep all text 100% completely free of asterisks (*).";
       effectiveMessages = [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: fullDirective },
         ...incomingMessages,
       ];
+    } else {
+      effectiveMessages = incomingMessages.map((m: unknown) => {
+        if (m && typeof m === "object" && "role" in m && ((m as { role?: string }).role === "system" || (m as { role?: string }).role === "developer")) {
+          return {
+            ...(m as Record<string, unknown>),
+            content: fullDirective + "\n\n" + ((m as { content?: string }).content || ""),
+          };
+        }
+        return m;
+      });
     }
 
     const isTieredFreemodel = FREEMODELS_TIERED_MODELS.has(requestedRawModel.toLowerCase());

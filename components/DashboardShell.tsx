@@ -8,7 +8,9 @@ import {
   BookOpen,
   Boxes,
   ChartColumn,
+  Check,
   CheckCircle2,
+  Copy,
   CreditCard,
   KeyRound,
   LayoutDashboard,
@@ -30,8 +32,33 @@ import { useDashboardEvents } from "@/lib/useDashboardEvents";
 import { Logo } from "./Logo";
 import { Badge, IconButton, useToast } from "./ui";
 
+export function getDeterministicAccountNumber(identifier: string): string {
+  const clean = (identifier || "").trim().toLowerCase();
+  let hash1 = 5381;
+  let hash2 = 52711;
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = (hash1 * 33) ^ char;
+    hash2 = (hash2 * 33) ^ char;
+  }
+  const part1 = (Math.abs(hash1) % 9000 + 1000).toString();
+  const part2 = (Math.abs(hash2) % 9000 + 1000).toString();
+  return `PR-ACC-${part1}-${part2}`;
+}
+
+export function getDeterministicUserId(identifier: string): string {
+  const clean = (identifier || "").trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const hex = Math.abs(hash).toString(16).padStart(8, "0");
+  return `usr_pr_${hex}`;
+}
+
 export interface Me {
-  user: { id: string; email: string; name: string; role: string };
+  user: { id: string; email: string; name: string; role: string; accountNumber?: string };
   balancePaise: number;
   plan: { slug: string; name: string; freeRpm: number; queuePriority: number } | null;
   astra: { active: boolean; expiresAt: string | null };
@@ -137,8 +164,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [notifs, setNotifs] = useState<Array<{ id: string; title: string; body: string; readAt: string | null }>>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  const copyValue = async (label: string, val: string) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      setCopiedField(label);
+      toast.push(`Copied ${label} to clipboard`, "success");
+      setTimeout(() => setCopiedField(null), 1800);
+    } catch {}
+  };
 
   useEffect(() => setDrawer(false), [pathname]);
 
@@ -333,17 +370,43 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <span className="flex size-7 items-center justify-center rounded-md border border-accent/30 bg-accent/10 font-mono text-[11px] font-semibold text-accent">{initials}</span>
                 </button>
                 {userOpen && (
-                  <div className="fade-up absolute right-0 top-11 z-30 w-60 rounded-xl border border-line2 bg-panel shadow-xl">
+                  <div className="fade-up absolute right-0 top-11 z-30 w-72 rounded-xl border border-line2 bg-panel shadow-xl">
                     <div className="border-b border-line px-4 py-3">
                       <div className="truncate text-[13px] font-medium">{me?.user.name || "Account"}</div>
                       <div className="truncate text-[12px] text-mut2">{me?.user.email}</div>
+                      <div className="mt-2.5 space-y-1.5 rounded-lg border border-line/60 bg-white/[0.02] p-2 text-[11px] font-mono">
+                        <div className="flex items-center justify-between text-mut">
+                          <span className="text-[10px] uppercase tracking-wider text-mut2">Account #</span>
+                          <button
+                            type="button"
+                            onClick={() => copyValue("Account Number", me?.user?.accountNumber || getDeterministicAccountNumber(me?.user?.email || ""))}
+                            className="inline-flex cursor-pointer items-center gap-1 text-fg hover:text-accent transition-colors"
+                            title="Click to copy Account Number"
+                          >
+                            <span className="font-semibold text-accent">{me?.user?.accountNumber || getDeterministicAccountNumber(me?.user?.email || "")}</span>
+                            {copiedField === "Account Number" ? <Check className="size-3 text-good" /> : <Copy className="size-3" />}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between text-mut">
+                          <span className="text-[10px] uppercase tracking-wider text-mut2">User ID</span>
+                          <button
+                            type="button"
+                            onClick={() => copyValue("User ID", me?.user?.id || getDeterministicUserId(me?.user?.email || ""))}
+                            className="inline-flex cursor-pointer items-center gap-1 text-fg hover:text-accent transition-colors"
+                            title="Click to copy User ID"
+                          >
+                            <span className="font-semibold text-fg/90">{me?.user?.id || getDeterministicUserId(me?.user?.email || "")}</span>
+                            {copiedField === "User ID" ? <Check className="size-3 text-good" /> : <Copy className="size-3" />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div className="p-1.5">
                       <Link href="/dashboard/settings" onClick={() => setUserOpen(false)} className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-mut transition-colors duration-200 hover:bg-white/[0.05] hover:text-fg">
-                        <Settings className="size-4" strokeWidth={1.75} aria-hidden="true" /> Settings
+                        <Settings className="size-4" strokeWidth={1.75} aria-hidden="true" /> Settings &amp; Credentials
                       </Link>
                       <Link href="/dashboard/wallet" onClick={() => setUserOpen(false)} className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-mut transition-colors duration-200 hover:bg-white/[0.05] hover:text-fg">
-                        <Wallet className="size-4" strokeWidth={1.75} aria-hidden="true" /> Wallet
+                        <Wallet className="size-4" strokeWidth={1.75} aria-hidden="true" /> Wallet &amp; Billing
                       </Link>
                       <button onClick={logout} className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13px] text-mut transition-colors duration-200 hover:bg-white/[0.05] hover:text-fg">
                         <LogOut className="size-4" strokeWidth={1.75} aria-hidden="true" /> Sign out

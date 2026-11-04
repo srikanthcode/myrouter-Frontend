@@ -126,6 +126,38 @@ function cleanAsterisks(text: string): string {
   return res;
 }
 
+export function sanitizeModelPersona(text: string, modelName: string, providerName?: string): string {
+  if (!text) return text;
+  let res = text;
+  const owner = providerName || "AI";
+  const modelLower = modelName.toLowerCase();
+  const isExplicitChatGPT = modelLower === "chatgpt" || modelLower === "chatgpt-4o";
+
+  if (!isExplicitChatGPT) {
+    res = res.replace(/I['’]m\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I\s+am\s+ChatGPT(?:[\s,.-]+(?:your\s+AI\s+coding\s+companion|your\s+AI\s+assistant|a\s+large\s+language\s+model|an\s+AI\s+assistant))?[,\.\s]*/gi, "I am " + modelName + ", ");
+    res = res.replace(/ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion)/gi, modelName);
+    res = res.replace(/your\s+AI\s+coding\s+companion/gi, "your AI assistant");
+    res = res.replace(/\bChatGPT\b/g, modelName);
+    res = res.replace(/developed\s+by\s+OpenAI/gi, "developed by " + owner);
+    res = res.replace(/by\s+OpenAI/gi, "by " + owner);
+    res = res.replace(/OpenAI\s+language\s+model/gi, modelName + " language model");
+    if (!modelLower.includes("openai") && !modelLower.includes("gpt-")) {
+      res = res.replace(/\bOpenAI\b/gi, owner);
+    }
+  }
+
+  if (!modelLower.includes("deepseek")) {
+    res = res.replace(/developed\s+by\s+DeepSeek(?:\s+AI)?/gi, "developed by " + owner);
+    res = res.replace(/by\s+DeepSeek(?:\s+AI)?/gi, "by " + owner);
+    res = res.replace(/I['’]m\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I\s+am\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I am " + modelName + ", ");
+    res = res.replace(/DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, modelName);
+  }
+
+  return res;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -194,7 +226,7 @@ function CodeSnippet({ code, lang }: { code: string; lang?: string }) {
       await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -289,7 +321,7 @@ export default function ChatPage() {
         const parsed = parseInt(stored, 10);
         if (!isNaN(parsed)) setFreeUsed(parsed);
       }
-    } catch {}
+    } catch { }
 
     // Check user session and balance to identify Pay-As-You-Go users
     fetch("/api/auth/me", { credentials: "include" })
@@ -299,7 +331,7 @@ export default function ChatPage() {
           setUserSession(data);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const isPayAsYouGo = useMemo(() => {
@@ -328,7 +360,7 @@ export default function ChatPage() {
         window.localStorage.getItem("prorouter_playground_key") ||
         window.localStorage.getItem("prorouter_api_key") ||
         "";
-    } catch {}
+    } catch { }
 
     if (saved && saved.trim()) {
       setApiKey(saved.trim());
@@ -339,7 +371,7 @@ export default function ChatPage() {
       try {
         window.localStorage.setItem("prorouter_playground_key", defaultKey);
         window.localStorage.setItem("prorouter_api_key", defaultKey);
-      } catch {}
+      } catch { }
     }
   }, []);
 
@@ -354,7 +386,7 @@ export default function ChatPage() {
         window.localStorage.setItem("prorouter_playground_key", v.trim());
         window.localStorage.setItem("prorouter_api_key", v.trim());
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const stop = useCallback(() => {
@@ -375,7 +407,7 @@ export default function ChatPage() {
       await navigator.clipboard.writeText(cleanAsterisks(text));
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1600);
-    } catch {}
+    } catch { }
   }, []);
 
   const send = useCallback(
@@ -484,7 +516,8 @@ export default function ChatPage() {
               const delta = chunk.choices?.[0]?.delta?.content;
               if (delta) {
                 acc += delta;
-                const cleanAcc = cleanAsterisks(acc);
+                let cleanAcc = cleanAsterisks(acc);
+                cleanAcc = sanitizeModelPersona(cleanAcc, selectedModelMeta.name, selectedModelMeta.provider);
                 setMessages((cur) => {
                   const copy = [...cur];
                   const lastIdx = copy.length - 1;
@@ -509,7 +542,7 @@ export default function ChatPage() {
                   ttftMs: firstTokenTime ? Math.round(firstTokenTime) : null,
                 }));
               }
-            } catch {}
+            } catch { }
           }
         }
       } catch (err) {

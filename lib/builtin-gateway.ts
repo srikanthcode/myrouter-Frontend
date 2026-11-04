@@ -77,6 +77,8 @@ export function generateDeterministicAccountNumber(identifier: string): string {
   return `PR-ACC-${part1}-${part2}`;
 }
 
+import { getTelemetryOverview, getAllActivity } from "@/lib/telemetry-store";
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -275,19 +277,13 @@ export async function handleFallback(req: NextRequest, path: string[]) {
 
   // ── Dashboard Overview & Stats ──
   if (subpath === "/dashboard/overview") {
+    const url = new URL(req.url);
+    const timeFilter = url.searchParams.get("time") || "This month";
+    const modelFilter = url.searchParams.get("model") || "By Model";
+    const stats = getTelemetryOverview(timeFilter, modelFilter);
+
     return NextResponse.json({
-      balancePaise: 25000,
-      balanceFormatted: "₹250.00",
-      today: {
-        requests: 0,
-        tokens: 0,
-        costPaise: 0,
-      },
-      month: {
-        requests: 0,
-        tokens: 0,
-        costPaise: 0,
-      },
+      ...stats,
       activeKeys: 1,
       freeUsed: 0,
       plan: {
@@ -295,11 +291,6 @@ export async function handleFallback(req: NextRequest, path: string[]) {
         name: "Free Tier",
         freeRpm: 20,
         queuePriority: 1,
-      },
-      astra: {
-        active: true,
-        expiresAt: null,
-        daysLeft: 30,
       },
       queue: [],
     });
@@ -309,59 +300,28 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     // If specific item requested: /dashboard/activity/:id
     if (subpath.length > "/dashboard/activity/".length && !subpath.includes("?")) {
       const id = subpath.slice("/dashboard/activity/".length);
+      const all = getAllActivity(100, 0);
+      const found = all.items.find((item) => item.id === id) || all.items[0];
       return NextResponse.json({
-        request: {
-          id,
-          createdAt: new Date().toISOString(),
-          model: "deepseek-v4.1-flash",
-          modelName: "DeepSeek V4.1 Flash",
-          provider: "DeepSeek",
-          status: "success",
-          httpStatus: 200,
-          route: "direct",
-          latencyMs: 380,
-          ttftMs: 140,
-          queueWaitMs: 0,
-          inputTokens: 120,
-          outputTokens: 280,
-          totalTokens: 400,
-          costPaise: 0,
-          streaming: true,
-          isFree: true,
-          errorCode: null,
-          errorMessage: null,
-          apiKey: { name: "Default Key", prefix: "pr_live_" },
-        },
+        request: found,
         attempts: [],
         timeline: [],
       });
     }
 
-    return NextResponse.json({
-      total: 0,
-      items: [],
-    });
+    const all = getAllActivity(50, 0);
+    return NextResponse.json(all);
   }
 
   if (subpath.startsWith("/dashboard/series")) {
-    const series = [];
-    const now = Date.now();
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now - i * 86400000);
-      series.push({
-        date: d.toISOString().split("T")[0],
-        requests: 0,
-        tokens: 0,
-        costPaise: 0,
-        errors: 0,
-      });
-    }
-    return NextResponse.json({ items: series });
+    const overview = getTelemetryOverview();
+    return NextResponse.json({ items: overview.dailySeries });
   }
 
-  if (subpath.startsWith("/dashboard/usage")) {
+  if (subpath.startsWith("/dashboard/usage") || subpath.startsWith("/usage")) {
+    const overview = getTelemetryOverview();
     return NextResponse.json({
-      byModel: [],
+      byModel: overview.models.map((m) => ({ model: m.id, n: m.requests, tokens: m.tokens, cost: m.spend })),
       byProvider: [],
     });
   }

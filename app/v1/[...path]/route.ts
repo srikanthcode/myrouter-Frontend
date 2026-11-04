@@ -6,17 +6,32 @@ export const maxDuration = 60; // Support full streaming inference duration on V
 
 // ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
 const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-const GATEWAY_BASE = (process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || "").replace(/\/+$/, "");
+const DEFAULT_GATEWAY_BASE = "https://api.tokenjuice.ai/v1";
+const GATEWAY_BASE = (process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || DEFAULT_GATEWAY_BASE).replace(/\/+$/, "");
 const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-1017";
 
 // Read API keys dynamically from environment variable (comma, semicolon, or space-separated)
 export function getGatewayKeyPool(): string[] {
   const envVal = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || process.env.PROROUTER_GATEWAY_KEYS || "";
-  if (!envVal.trim()) return [];
-  return envVal
+  const fallbackPool = [
+    "tj_llvqgvMUMVg5SKOynVBtBqDJp2J566mapFE9KNPAVqE",
+    "tj_mbQStnVQZo7aV70jSdb5T3L1rSs4vmtKvVuPdYMsxCs",
+    "tj_XvoBmNCcszDFBbOtvS-D62oDXEEO7OEIqd9rzhfxZX8",
+    "tj_82Vn1a2E8vEx4GYI9-SFYpPzfdHRxueNdgo-tLwaLzU",
+    "tj_AuPOZPmvg2huDYZCB7DtY4wvWdPj8_LfWh0ktfaCaIQ",
+    "tj_eqMEPp8AaPurBNL2uH1woNwxMYpVNtZ1_ohcFmxMGGg",
+    "tj_NmZmLWnTyUM7UhdFCQ7ZFwros2U5lJWSWbyHpR03Q-8",
+    "tj_YFTNGYInY6JLHh51uQXE2wOgNfSZOdCTRKCQG0_5YYc",
+    "tj_2wYDoVGvY6TWI9u2zMZpbY80ijRR9hB9SYJVIppXCOg",
+    "tj_gM_Y7cHTk7dld2naygnUcBpFWnFo1d_cmWc0YUbXox4",
+    "tj_m0sow5S81J10HmZLkIC-lPXWmIl8ojnREQ9Mo_Xd3ts",
+  ];
+  if (!envVal.trim()) return fallbackPool;
+  const parsed = envVal
     .split(/[\s,;\n]+/)
     .map((k) => k.trim())
     .filter(Boolean);
+  return parsed.length > 0 ? parsed : fallbackPool;
 }
 
 const cooldownMap = new Map<string, number>();

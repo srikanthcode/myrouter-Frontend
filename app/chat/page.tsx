@@ -13,17 +13,19 @@ import {
   Send,
   ChevronDown,
   Info,
+  Search,
 } from "lucide-react";
 import { PublicNav } from "@/components/PublicNav";
 import { Badge, Button, useToast } from "@/components/ui";
 import { cx, formatINR } from "@/lib/api";
+import { MODEL_PROFILES_500 } from "@/lib/model-profiles-data";
 
 // ── Model Definition ──
 export interface ModelMeta {
   slug: string;
   name: string;
   provider: string;
-  category: "Tiered" | "Coding" | "Frontier" | "Open-Weight";
+  category: string;
   description: string;
   context: string;
   badge?: string;
@@ -31,13 +33,12 @@ export interface ModelMeta {
   outputPer1M: number;
 }
 
-export const CATALOG_MODELS: ModelMeta[] = [
-  // ── Pro Router Tiered ──
+const PRO_ROUTER_TIERED_MODELS: ModelMeta[] = [
   {
     slug: "pr-zenith",
     name: "Pro Router Zenith",
     provider: "ProRouter",
-    category: "Tiered",
+    category: "Pro Router Tiered",
     description: "Flagship tier for complex analysis, architecture synthesis, and deep reasoning workflows.",
     context: "128k context",
     badge: "Flagship",
@@ -48,7 +49,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     slug: "pr-aura",
     name: "Pro Router Aura",
     provider: "ProRouter",
-    category: "Tiered",
+    category: "Pro Router Tiered",
     description: "Advanced reasoning, long-form content, complex instructions, and coding assistance.",
     context: "128k context",
     badge: "Writing",
@@ -59,7 +60,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     slug: "pr-nova",
     name: "Pro Router Nova",
     provider: "ProRouter",
-    category: "Tiered",
+    category: "Pro Router Tiered",
     description: "General-purpose premium model for detailed answers, writing, reasoning, and development.",
     context: "128k context",
     badge: "General",
@@ -70,7 +71,7 @@ export const CATALOG_MODELS: ModelMeta[] = [
     slug: "pr-swift",
     name: "Pro Router Swift",
     provider: "ProRouter",
-    category: "Tiered",
+    category: "Pro Router Tiered",
     description: "Ultra-fast low latency model designed for customer support, quick chat, and high-volume tasks.",
     context: "128k context",
     badge: "Fast",
@@ -81,280 +82,35 @@ export const CATALOG_MODELS: ModelMeta[] = [
     slug: "pr-echo",
     name: "Pro Router Echo",
     provider: "ProRouter",
-    category: "Tiered",
+    category: "Pro Router Tiered",
     description: "Affordable model for everyday questions, short answers, summaries, and simple chat.",
     context: "128k context",
     badge: "Starter",
     inputPer1M: 0.20,
     outputPer1M: 0.80,
   },
-
-  // ── Agentic Coding & Reasoning ──
-  {
-    slug: "kimi-k2.7-code",
-    name: "Kimi K2.7 Code",
-    provider: "Moonshot",
-    category: "Coding",
-    description: "Specialized agentic coding model for repository refactoring, multi-file edits, and debugging.",
-    context: "128k context",
-    badge: "Top Choice",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "qwen3-coder-next",
-    name: "Qwen3-Coder-Next",
-    provider: "Alibaba",
-    category: "Coding",
-    description: "Next-generation software engineering model for polyglot repository synthesis.",
-    context: "128k context",
-    badge: "Code",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "devstral-24b",
-    name: "Devstral 24B",
-    provider: "Mistral",
-    category: "Coding",
-    description: "Mistral specialized developer model optimized for zero-shot script and terminal tasks.",
-    context: "32k context",
-    badge: "Code",
-    inputPer1M: 0.40,
-    outputPer1M: 1.60,
-  },
-  {
-    slug: "claude-sonnet",
-    name: "Claude Sonnet",
-    provider: "Anthropic",
-    category: "Coding",
-    description: "High-precision software engineering, architectural analysis, and complex code refactoring.",
-    context: "200k context",
-    badge: "Engineering",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "claude-opus",
-    name: "Claude Opus",
-    provider: "Anthropic",
-    category: "Frontier",
-    description: "Anthropic flagship deep architecture, mathematical analysis, and multi-step reasoning.",
-    context: "200k context",
-    badge: "Flagship",
-    inputPer1M: 1.00,
-    outputPer1M: 4.00,
-  },
-
-  // ── Frontier Open-Weight ──
-  {
-    slug: "deepseek-v4.1-flash-1017",
-    name: "DeepSeek-V4.1-Flash-1017",
-    provider: "DeepSeek",
-    category: "Frontier",
-    description: "State-of-the-art open-weight checkpoint with lightning fast token throughput and deep reasoning.",
-    context: "128k context",
-    badge: "Popular",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "deepseek-v4.1-flash",
-    name: "DeepSeek V4.1 Flash",
-    provider: "DeepSeek",
-    category: "Frontier",
-    description: "DeepSeek flagship high-speed reasoning, coding, and multilingual intelligence.",
-    context: "128k context",
-    badge: "Frontier",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "qwen3.8-27b",
-    name: "Qwen3.8-27B",
-    provider: "Alibaba",
-    category: "Open-Weight",
-    description: "Alibaba dense open-weight intelligence with strong multilingual comprehension and coding.",
-    context: "128k context",
-    badge: "High IQ",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "glm-5.3",
-    name: "GLM-5.3",
-    provider: "Zhipu AI",
-    category: "Open-Weight",
-    description: "General Language Model 5.3 with strong logical reasoning and bilingual fluency.",
-    context: "128k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "kimi-k3",
-    name: "Kimi K3",
-    provider: "Moonshot",
-    category: "Open-Weight",
-    description: "Moonshot Kimi K3 ultra-long context reasoning and document synthesis.",
-    context: "128k context",
-    badge: "Long Context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "mimo-v2.6-pro",
-    name: "MiMo-V2.6-Pro",
-    provider: "MiMo",
-    category: "Open-Weight",
-    description: "Dense multimodal and deep reasoning model for intricate prompt comprehension.",
-    context: "64k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "minimax-m3.1-flash",
-    name: "MiniMax M3.1 Flash",
-    provider: "MiniMax",
-    category: "Open-Weight",
-    description: "High-throughput rapid text generation with balanced accuracy and minimal latency.",
-    context: "128k context",
-    badge: "Fast",
-    inputPer1M: 0.30,
-    outputPer1M: 1.20,
-  },
-  {
-    slug: "gemini-pro",
-    name: "Gemini Pro",
-    provider: "Google",
-    category: "Frontier",
-    description: "Google frontier multimodal intelligence and structured reasoning alias.",
-    context: "128k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "grok",
-    name: "Grok",
-    provider: "xAI",
-    category: "Frontier",
-    description: "xAI Grok conversational and direct reasoning model alias.",
-    context: "128k context",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "mistral-large",
-    name: "Mistral Large",
-    provider: "Mistral",
-    category: "Frontier",
-    description: "Mistral Large frontier multilingual reasoning and enterprise-grade synthesis.",
-    context: "128k context",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "glm-5.3-flash",
-    name: "GLM 5.3 Flash",
-    provider: "Zhipu AI",
-    category: "Open-Weight",
-    description: "Ultra-fast low-latency GLM variant for instantaneous conversational replies.",
-    context: "64k context",
-    badge: "Fast",
-    inputPer1M: 0.30,
-    outputPer1M: 1.20,
-  },
-  {
-    slug: "gpt-6.1-sol",
-    name: "GPT-6.1 Sol",
-    provider: "OpenAI",
-    category: "Frontier",
-    description: "Next-gen frontier reasoning engine with extensive instruction-following capability.",
-    context: "128k context",
-    badge: "Next-Gen",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "gpt-6.1-terra",
-    name: "GPT-6.1 Terra",
-    provider: "OpenAI",
-    category: "Frontier",
-    description: "Deep contextual reasoning and multi-stage workflow planning alias.",
-    context: "128k context",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "mimo-v2.6-flash",
-    name: "MiMo V2.6 Flash",
-    provider: "MiMo",
-    category: "Open-Weight",
-    description: "MiMo fast-turnaround conversational assistant.",
-    context: "32k context",
-    inputPer1M: 0.30,
-    outputPer1M: 1.20,
-  },
-  {
-    slug: "gpt-6-luna",
-    name: "GPT-6 Luna",
-    provider: "OpenAI",
-    category: "Frontier",
-    description: "Efficient frontier completion alias.",
-    context: "64k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "beam",
-    name: "Beam",
-    provider: "ProRouter",
-    category: "Tiered",
-    description: "ProRouter low-latency conversational routing pipeline.",
-    context: "32k context",
-    inputPer1M: 0.30,
-    outputPer1M: 1.20,
-  },
-  {
-    slug: "nemotron-3.5-super-vl",
-    name: "Nemotron 3.5 Super VL",
-    provider: "NVIDIA",
-    category: "Frontier",
-    description: "NVIDIA Nemotron high-capacity reasoning model.",
-    context: "128k context",
-    inputPer1M: 0.75,
-    outputPer1M: 3.00,
-  },
-  {
-    slug: "nemotron-3.5-lightning",
-    name: "Nemotron 3.5 Lightning",
-    provider: "NVIDIA",
-    category: "Open-Weight",
-    description: "NVIDIA Nemotron ultra-fast completion model.",
-    context: "64k context",
-    inputPer1M: 0.40,
-    outputPer1M: 1.60,
-  },
-  {
-    slug: "longcat-2.5-preview",
-    name: "LongCat 2.5 Preview",
-    provider: "Meituan",
-    category: "Open-Weight",
-    description: "LongCat ultra-long context reasoning preview.",
-    context: "128k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
-  {
-    slug: "jev-1.13",
-    name: "Jev 1.13",
-    provider: "Jev",
-    category: "Open-Weight",
-    description: "Dense synthesis and multi-step reasoning variant.",
-    context: "64k context",
-    inputPer1M: 0.50,
-    outputPer1M: 2.00,
-  },
 ];
+
+const mappedProfiles: ModelMeta[] = MODEL_PROFILES_500.map((m) => ({
+  slug: m.slug || m.id,
+  name: m.name,
+  provider: m.providerName || "ProRouter",
+  category: m.categoryLabel || m.category || "General-Purpose AI",
+  description: m.description || "",
+  context: m.contextWindow ? String(Math.round(m.contextWindow / 1000)) + "k context" : "128k context",
+  badge: m.isFree ? "Free" : (m.rank && m.rank <= 10 ? "Top Pick" : undefined),
+  inputPer1M: Number(((m.pricing?.inputPerMillion || 0) / 80).toFixed(4)),
+  outputPer1M: Number(((m.pricing?.outputPerMillion || 0) / 80).toFixed(4)),
+}));
+
+const seenSlugs = new Set<string>();
+export const CATALOG_MODELS: ModelMeta[] = [];
+for (const m of [...PRO_ROUTER_TIERED_MODELS, ...mappedProfiles]) {
+  if (!seenSlugs.has(m.slug)) {
+    seenSlugs.add(m.slug);
+    CATALOG_MODELS.push(m);
+  }
+}
 
 // ── Clean all asterisks (*) from text so AI replies never show * ──
 function cleanAsterisks(text: string): string {
@@ -483,6 +239,25 @@ const PROMPT_SUGGESTIONS = [
 
 export default function ChatPage() {
   const toast = useToast();
+  const [modelSearch, setModelSearch] = useState("");
+  const filteredModels = useMemo(() => {
+    if (!modelSearch.trim()) return CATALOG_MODELS;
+    const q = modelSearch.toLowerCase().trim();
+    return CATALOG_MODELS.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.slug.toLowerCase().includes(q) ||
+        m.provider.toLowerCase().includes(q) ||
+        m.category.toLowerCase().includes(q)
+    );
+  }, [modelSearch]);
+  const modelCategories = useMemo(() => {
+    const cats: string[] = [];
+    for (const m of filteredModels) {
+      if (!cats.includes(m.category)) cats.push(m.category);
+    }
+    return cats;
+  }, [filteredModels]);
   const [model, setModel] = useState("kimi-k2.7-code");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -721,44 +496,39 @@ export default function ChatPage() {
             <span className="text-[13.5px] font-semibold tracking-tight text-fg">Playground</span>
             <span className="text-line2 text-xs">/</span>
 
-            {/* Model Selector */}
-            <div className="relative">
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={streaming}
-                className="h-7.5 cursor-pointer appearance-none rounded-md border border-line2 bg-ink2 pl-2.5 pr-7 font-mono text-[11.5px] font-medium text-fg shadow-sm transition-colors duration-150 hover:border-mut focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              >
-                <optgroup label="Pro Router Tiered">
-                  {CATALOG_MODELS.filter((m) => m.category === "Tiered").map((m) => (
-                    <option key={m.slug} value={m.slug}>
-                      {m.name} ({m.provider})
-                    </option>
+            {/* Model Selector & Filter */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={streaming}
+                  className="h-7.5 max-w-[200px] sm:max-w-[280px] cursor-pointer appearance-none rounded-md border border-line2 bg-ink2 pl-2.5 pr-7 font-mono text-[11.5px] font-medium text-fg shadow-sm transition-colors duration-150 hover:border-mut focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent truncate"
+                >
+                  {modelCategories.map((cat) => (
+                    <optgroup key={cat} label={cat + " (" + filteredModels.filter((m) => m.category === cat).length + ")"}>
+                      {filteredModels.filter((m) => m.category === cat).map((m) => (
+                        <option key={m.slug} value={m.slug}>
+                          {m.name} ({m.provider})
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
-                </optgroup>
-                <optgroup label="Agentic Coding & Reasoning">
-                  {CATALOG_MODELS.filter((m) => m.category === "Coding").map((m) => (
-                    <option key={m.slug} value={m.slug}>
-                      {m.name} ({m.provider})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Frontier Flagships">
-                  {CATALOG_MODELS.filter((m) => m.category === "Frontier").map((m) => (
-                    <option key={m.slug} value={m.slug}>
-                      {m.name} ({m.provider})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Open-Weight Models">
-                  {CATALOG_MODELS.filter((m) => m.category === "Open-Weight").map((m) => (
-                    <option key={m.slug} value={m.slug}>
-                      {m.name} ({m.provider})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-2 size-3.5 text-mut" />
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-2 size-3.5 text-mut" />
+              </div>
+
+              {/* Instant Search Filter */}
+              <div className="relative hidden md:block">
+                <Search className="pointer-events-none absolute left-2 top-2 size-3 text-mut" />
+                <input
+                  type="text"
+                  placeholder="Filter 500+ models..."
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  className="h-7.5 w-36 lg:w-44 rounded-md border border-line2 bg-ink2 pl-6 pr-2 font-mono text-[11px] text-fg placeholder:text-mut2 focus:border-accent focus:outline-none transition-all duration-200"
+                />
+              </div>
             </div>
 
             <span className="hidden sm:inline-flex items-center rounded border border-line px-1.5 py-0.5 font-mono text-[10.5px] text-mut2">

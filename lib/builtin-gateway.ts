@@ -212,7 +212,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       user,
       balancePaise: 25000,
       plan: { slug: "free", name: "Free Tier", pricePaise: 0, freeRpm: 20, queuePriority: 1 },
-      astra: { active: true, expiresAt: null, daysLeft: 30 },
+      astra: { active: false, expiresAt: null, daysLeft: 0 },
     });
   }
 

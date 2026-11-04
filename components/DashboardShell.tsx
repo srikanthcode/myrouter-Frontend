@@ -22,7 +22,6 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  Sparkles,
   Users,
   Wallet,
   X,
@@ -70,7 +69,7 @@ interface SessionState {
   refresh: () => Promise<void>;
 }
 
-const SessionCtx = createContext<SessionState>({ me: null, loading: true, refresh: async () => {} });
+const SessionCtx = createContext<SessionState>({ me: null, loading: true, refresh: async () => { } });
 export function useSession() {
   return useContext(SessionCtx);
 }
@@ -103,30 +102,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 }
 
 const nav = [
-  { section: "Overview", items: [
-    { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { href: "/chat", label: "Playground", icon: MessageSquare },
-    { href: "/dashboard/text", label: "Text & Reply", icon: MessagesSquare },
-    { href: "/models", label: "Models", icon: Boxes },
-  ]},
-  { section: "Build", items: [
-    { href: "/dashboard/keys", label: "API Keys", icon: KeyRound },
-    { href: "/dashboard/activity", label: "Activity", icon: ScrollText },
-    { href: "/dashboard/usage", label: "Usage", icon: ChartColumn },
-    { href: "/dashboard/inspector", label: "Inspector", icon: ScanSearch },
-  ]},
-  { section: "Money", items: [
-    { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
-    { href: "/pricing", label: "Billing & Plans", icon: CreditCard },
-    { href: "/dashboard/referrals", label: "Referrals", icon: Users },
-  ]},
-  { section: "Administration", items: [
-    { href: "/dashboard/admin", label: "Admin Console", icon: ShieldCheck },
-  ]},
-  { section: "Account", items: [
-    { href: "/dashboard/settings", label: "Settings", icon: Settings },
-    { href: "/docs", label: "Documentation", icon: BookOpen },
-  ]},
+  {
+    section: "Overview", items: [
+      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+      { href: "/chat", label: "Playground", icon: MessageSquare },
+      { href: "/dashboard/text", label: "Text & Reply", icon: MessagesSquare },
+      { href: "/models", label: "Models", icon: Boxes },
+    ]
+  },
+  {
+    section: "Build", items: [
+      { href: "/dashboard/keys", label: "API Keys", icon: KeyRound },
+      { href: "/dashboard/activity", label: "Activity", icon: ScrollText },
+      { href: "/dashboard/usage", label: "Usage", icon: ChartColumn },
+      { href: "/dashboard/inspector", label: "Inspector", icon: ScanSearch },
+    ]
+  },
+  {
+    section: "Money", items: [
+      { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
+      { href: "/pricing", label: "Billing & Plans", icon: CreditCard },
+      { href: "/dashboard/referrals", label: "Referrals", icon: Users },
+    ]
+  },
+  {
+    section: "Administration", items: [
+      { href: "/dashboard/admin", label: "Admin Console", icon: ShieldCheck },
+    ]
+  },
+  {
+    section: "Account", items: [
+      { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/docs", label: "Documentation", icon: BookOpen },
+    ]
+  },
 ];
 
 type NavItem = (typeof nav)[number]["items"][number];
@@ -174,7 +183,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       setCopiedField(label);
       toast.push(`Copied ${label} to clipboard`, "success");
       setTimeout(() => setCopiedField(null), 1800);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => setDrawer(false), [pathname]);
@@ -302,12 +311,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               )}
               <div className="hidden items-center gap-2 xl:flex">
                 {me?.plan && <Badge tone="neutral">{me.plan.name} plan</Badge>}
-                {me?.astra?.active && (
-                  <Badge tone="accent">
-                    <Sparkles className="size-3" aria-hidden="true" />
-                    Astra · {me.astra?.expiresAt ? `${Math.max(0, Math.ceil((new Date(me.astra.expiresAt).getTime() - Date.now()) / 86400000))}d left` : "active"}
-                  </Badge>
-                )}
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -323,7 +326,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     if (!notifOpen && unread) {
                       void api("/notifications/read", { method: "POST" })
                         .then(() => setNotifs((n) => n.map((x) => ({ ...x, readAt: x.readAt ?? new Date().toISOString() }))))
-                        .catch(() => {});
+                        .catch(() => { });
                     }
                   }}
                 >

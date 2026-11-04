@@ -26,7 +26,7 @@ export default function SettingsPage() {
       setCopiedField(field);
       toast.push(`Copied ${field} to clipboard`, "success");
       setTimeout(() => setCopiedField(null), 1800);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {

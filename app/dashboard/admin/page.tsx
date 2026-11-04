@@ -119,7 +119,7 @@ export default function AdminPage() {
           );
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 

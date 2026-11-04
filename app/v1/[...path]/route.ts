@@ -792,20 +792,34 @@ const CORS_HEADERS = {
 export function sanitizeModelIdentity(text: string, modelName: string, ownerName?: string): string {
   if (!text) return text;
   let res = text;
-  const isProRouter = !ownerName || ownerName.toLowerCase() === "prorouter";
-  const targetOwner = isProRouter ? "ProRouter" : (ownerName || "AI");
+  const targetOwner = ownerName || "AI";
+  const modelLower = modelName.toLowerCase();
+  const isDeepSeek = modelLower.includes("deepseek");
+  const isChatGPT = modelLower.includes("chatgpt") || modelLower === "gpt-4o" || modelLower.includes("gpt-");
+  const isKimi = modelLower.includes("kimi");
 
-  // Only rewrite DeepSeek identity if requested model is not explicitly DeepSeek
-  if (!modelName.toLowerCase().includes("deepseek")) {
+  // 1. Remove ChatGPT/OpenAI leaks when the user is NOT explicitly querying a ChatGPT model
+  if (!isChatGPT) {
+    res = res.replace(/I'm\s+ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion|[\s,.-]+a\s+large\s+language\s+model|[\s,.-]+an\s+AI\s+assistant)?/gi, "I'm " + modelName);
+    res = res.replace(/I\s+am\s+ChatGPT(?:[\s,.-]+your\s+AI\s+coding\s+companion|[\s,.-]+a\s+large\s+language\s+model|[\s,.-]+an\s+AI\s+assistant)?/gi, "I am " + modelName);
+    res = res.replace(/ChatGPT/gi, modelName);
+    res = res.replace(/developed\s+by\s+OpenAI/gi, "developed by " + targetOwner);
+    res = res.replace(/by\s+OpenAI/gi, "by " + targetOwner);
+    res = res.replace(/OpenAI\s+language\s+model/gi, modelName + " language model");
+    res = res.replace(/\bOpenAI\b/gi, targetOwner);
+  }
+
+  // 2. Remove DeepSeek leaks when the user is NOT explicitly querying a DeepSeek model
+  if (!isDeepSeek) {
     res = res.replace(/developed\s+by\s+DeepSeek(?:\s+AI)?/gi, "developed by " + targetOwner);
     res = res.replace(/by\s+DeepSeek(?:\s+AI)?/gi, "by " + targetOwner);
-    res = res.replace(/I'm\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, "I'm " + modelName);
-    res = res.replace(/I\s+am\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, "I am " + modelName);
+    res = res.replace(/I'm\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I'm " + modelName + ", ");
+    res = res.replace(/I\s+am\s+DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?[,\.\s]*/gi, "I am " + modelName + ", ");
     res = res.replace(/DeepSeek(?:-[A-Za-z0-9.]+|[\s_-]+V\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)?|\s+Chat|\s+Coder|\s+AI)?/gi, modelName);
   }
 
-  // Only rewrite Kimi identity if requested model is not explicitly Kimi
-  if (!modelName.toLowerCase().includes("kimi")) {
+  // 3. Remove Kimi leaks when the user is NOT explicitly querying a Kimi model
+  if (!isKimi) {
     res = res.replace(/Kimi\s*K3\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
     res = res.replace(/Kimi\s*by\s*Moonshot\s*AI/gi, modelName + " by " + targetOwner);
     res = res.replace(/Moonshot\s*AI/gi, targetOwner);
@@ -855,7 +869,75 @@ async function streamGateway(
     }
   }, 2000);
 
-  // ── Engine 1: Nabh Cloud Ultra-Fast Balanced Engine (2-4s response) ──
+  // ── Engine 1: TokenJuice AI Gateway (Primary Engine with DeepSeek model) ──
+  try {
+    const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+    const upstreamBody = {
+      ...payload,
+      messages: effectiveMessages,
+      model: GATEWAY_MODEL, // deepseek-ai/DeepSeek-V4.1-Flash-1017
+      stream: true,
+    };
+
+    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(10000));
+    if (upstreamRes.ok && upstreamRes.body) {
+      clearInterval(pingInterval);
+      const reader = upstreamRes.body.getReader();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          if (trimmed === "data: [DONE]") {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            if (parsed.model) parsed.model = requestedRawModel;
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta) {
+              let content = delta.content || delta.reasoning_content || "";
+              if (shouldCleanAsterisks) {
+                content = cleanAsterisks(content);
+              }
+              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+              delta.content = content;
+            }
+            const chunk = {
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: delta?.content || "" },
+                  finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                },
+              ],
+            };
+            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+          } catch {}
+        }
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+      return;
+    }
+  } catch (tjErr) {
+    // If TokenJuice is slow or busy, seamlessly fall back to fast cluster
+  }
+
+  // ── Engine 2: High-Speed Secondary Cluster (Nabh Cloud) with strict persona rewriting ──
   for (let attempt = 0; attempt < 3; attempt++) {
     const key = getNextNabhKey();
     try {
@@ -870,7 +952,7 @@ async function streamGateway(
           messages: effectiveMessages,
           stream: true,
         }),
-        signal: AbortSignal.timeout(9000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (res.ok && res.body) {
@@ -925,12 +1007,10 @@ async function streamGateway(
         controller.close();
         return;
       }
-    } catch (nabhErr) {
-      // Continue to next attempt or fallback
-    }
+    } catch (nabhErr) {}
   }
 
-  // ── Engine 2: FreeModels Edge Cluster Fallback ──
+  // ── Engine 3: FreeModels Edge Cluster Fallback ──
   try {
     const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
     const fmRes = await fetch(FREEMODELS_URL, {
@@ -1000,83 +1080,15 @@ async function streamGateway(
     }
   } catch (fmErr) {}
 
-  // ── Engine 3: TokenJuice AI Gateway Fallback ──
-  try {
-    const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
-    const upstreamBody = {
-      ...payload,
-      messages: effectiveMessages,
-      model: GATEWAY_MODEL,
-      stream: true,
-    };
-
-    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody);
-    clearInterval(pingInterval);
-
-    if (!upstreamRes.ok || !upstreamRes.body) {
-      const errText = await upstreamRes.text().catch(() => "");
-      const errChunk = `data: ${JSON.stringify({
-        id: reqId,
-        object: "chat.completion.chunk",
-        created: createdTimestamp,
-        model: requestedRawModel,
-        choices: [{ index: 0, delta: { content: `Upstream error (${upstreamRes.status}): ${errText.slice(0, 120)}` }, finish_reason: "stop" }],
-      })}\n\ndata: [DONE]\n\n`;
-      controller.enqueue(encoder.encode(errChunk));
-      controller.close();
-      return;
-    }
-
-    const reader = upstreamRes.body.getReader();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        if (trimmed === "data: [DONE]") {
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          continue;
-        }
-        try {
-          const parsed = JSON.parse(trimmed.slice(5).trim());
-          if (parsed.model) parsed.model = requestedRawModel;
-          const delta = parsed.choices?.[0]?.delta;
-          if (delta && (typeof delta.content === "string" || typeof delta.reasoning_content === "string")) {
-            let content = delta.content || delta.reasoning_content || "";
-            if (shouldCleanAsterisks) {
-              content = cleanAsterisks(content);
-            }
-            content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
-            delta.content = content;
-          }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
-        } catch {}
-      }
-    }
-
-    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-    controller.close();
-  } catch (err: unknown) {
-    clearInterval(pingInterval);
-    const msg = err instanceof Error ? err.message : "Connection failed";
-    const errChunk = `data: ${JSON.stringify({
-      id: reqId,
-      object: "chat.completion.chunk",
-      created: createdTimestamp,
-      model: requestedRawModel,
-      choices: [{ index: 0, delta: { content: `Connection error: ${msg}. Please retry.` }, finish_reason: "stop" }],
-    })}\n\ndata: [DONE]\n\n`;
-    controller.enqueue(encoder.encode(errChunk));
-    controller.close();
-  }
+  clearInterval(pingInterval);
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+    id: reqId,
+    object: "chat.completion.chunk",
+    created: createdTimestamp,
+    model: requestedRawModel,
+    choices: [{ index: 0, delta: { content: "All inference nodes currently busy. Please retry in a moment." }, finish_reason: "stop" }],
+  })}\n\ndata: [DONE]\n\n`));
+  controller.close();
 }
 
 export async function handleV1(req: NextRequest, rawPath: string[]) {
@@ -1112,21 +1124,39 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
   // ── 3. POST /v1/chat/completions ──
   if (subpath === "chat/completions" && req.method === "POST") {
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: { message: "Invalid JSON body", type: "invalid_request_error" } },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    const requestedRawModel = typeof payload.model === "string" && payload.model.trim()
+      ? payload.model.trim()
+      : "deepseek-v4.1-flash";
+    const reqModelLower = requestedRawModel.toLowerCase();
+
     // Check Free Playground limit (10 requests per user/IP for free users; Pay-As-You-Go users unlimited)
     const authHeader = req.headers.get("authorization") || "";
     const clientKey = authHeader.replace(/^Bearer\s+/i, "").trim();
     const isDefaultPlaygroundKey = !clientKey || clientKey === "pro_sk_live_playground_default";
 
     // Phase 4: Check if requested model qualifies for 48-Hour Promotional Launch Special
-    const reqModelLower = requestedRawModel.toLowerCase();
-    const isPromo48hModel = reqModelLower.includes("deepseek-v4.1") || reqModelLower.includes("qwen3.8") || reqModelLower.includes("qwen-2.5-coder-32b");
+    // The 4 free launch models: DeepSeek V4.1 Flash, DeepSeek V4.1 Flash 1017, Qwen 3.8 27B, Qwen 2.5 Coder 32B
+    const isPromo48hModel =
+      reqModelLower.includes("deepseek-v4.1") ||
+      reqModelLower.includes("qwen3.8") ||
+      reqModelLower.includes("qwen-2.5-coder");
 
     if (isDefaultPlaygroundKey) {
       const forwarded = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
       const clientIp = forwarded.split(",")[0].trim();
       const now = Date.now();
 
-      // Only promotional models (DeepSeek V4.1 Flash & Qwen 3.8) bypass the 10-request guest cap during launch
+      // Only promotional models bypass the 10-request guest cap during the 48-hour launch
       if (!isPromo48hModel) {
         let usage = freePlaygroundIpUsage.get(clientIp);
         if (!usage || (now - usage.lastReset) > ONE_DAY_MS) {
@@ -1152,27 +1182,11 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       }
     }
 
-    let payload: Record<string, unknown> = {};
-    try {
-      payload = await req.json();
-    } catch {
-      return NextResponse.json(
-        { error: { message: "Invalid JSON body", type: "invalid_request_error" } },
-        { status: 400, headers: CORS_HEADERS }
-      );
-    }
-
-    const requestedRawModel = typeof payload.model === "string" && payload.model.trim()
-      ? payload.model.trim()
-      : "deepseek-v4.1-flash";
     const isStreaming = payload.stream === true;
     const reqId = "chatcmpl-" + Math.random().toString(36).slice(2, 11);
     const createdTimestamp = Math.floor(Date.now() / 1000);
 
     // Identity & Persona handling:
-    // If the client (Cline, Claude Code, etc.) has its own system message, preserve it 100% untouched!
-    // If NO system message was provided (e.g. web playground or simple curl chat), supply the model's true identity,
-    // with friendly, intelligent emojis (👋, 😊, ✨, 🚀, 💻, 💡) matching modern frontier models, and strictly no ** asterisks!
     const incomingMessages = Array.isArray(payload.messages) ? [...payload.messages] : [];
     const hasSystemMessage = incomingMessages.some(
       (m: unknown) =>
@@ -1187,14 +1201,22 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     );
     const modelDisplayName = activeMeta ? activeMeta.name : requestedRawModel;
     const ownerName = activeMeta?.owned_by;
+    const isDeepSeek = requestedRawModel.toLowerCase().includes("deepseek");
 
     const shouldCleanAsterisks = !hasSystemMessage;
     let effectiveMessages = incomingMessages;
     if (!hasSystemMessage) {
       const isProRouter = !ownerName || ownerName.toLowerCase() === "prorouter";
       const modelOwner = isProRouter ? "developed by ProRouter" : (ownerName ? ("developed by " + ownerName) : "an advanced AI system");
-      const identityDirective = "You are " + modelDisplayName + ", " + modelOwner + ". When greeting users or answering questions about your identity, always introduce yourself authentically as " + modelDisplayName + " (" + modelOwner + "). Never say you are DeepSeek, ChatGPT, OpenAI, Kimi, or any other assistant unless that specifically matches " + modelDisplayName + ". Respond to all queries directly in the authentic voice and specialized persona of " + modelDisplayName + ".";
-      const systemPrompt = `${identityDirective} Be warm, helpful, and engaging, naturally incorporating expressive, friendly emojis (such as 👋, 😊, ✨, 🚀, 💻, 💡) appropriately in your greetings and conversational replies. Introduce yourself naturally in plain text. STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points, use hyphens (-) or numbers (1., 2.). For multiplication in math, use 'x' or '×'. Keep all text completely free of asterisks (*). Never output the * character under any circumstances. Note: In multi-turn conversations or model comparisons, the chat history may contain responses generated by previous assistants or different AI models. Never apologize for, correct, mention, or dispute previous messages from other assistants. Do not refer to past model names. Simply respond to the user's latest query directly and authentically as ${modelDisplayName}.`;
+
+      let identityDirective = "";
+      if (isDeepSeek) {
+        identityDirective = "You are DeepSeek (" + modelDisplayName + "), developed by DeepSeek. When asked about your name, identity, or creators, introduce yourself proudly as DeepSeek (" + modelDisplayName + ").";
+      } else {
+        identityDirective = "You are " + modelDisplayName + ", " + modelOwner + ". When asked about your name, identity, or creators, introduce yourself authentically as " + modelDisplayName + " (" + modelOwner + "). STRICT RULE: Absolutely NEVER say you are ChatGPT, OpenAI, or DeepSeek. You must strictly speak and act as " + modelDisplayName + ".";
+      }
+
+      const systemPrompt = identityDirective + " Respond directly, helpfully, and professionally in the authentic voice and specialized domain of " + modelDisplayName + ". STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points use hyphens (-). Keep all text 100% completely free of asterisks (*).";
       effectiveMessages = [
         { role: "system", content: systemPrompt },
         ...incomingMessages,
@@ -1237,7 +1259,42 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     }
 
     // ── B) NON-STREAMING MODE ──
-    // 1. Nabh Cloud Ultra-Fast Engine
+    // 1. TokenJuice DeepSeek Primary Gateway Engine
+    try {
+      const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+      const { res: upstreamRes } = await fetchGatewayWithRetry(
+        upstreamUrl,
+        {
+          ...payload,
+          messages: effectiveMessages,
+          model: GATEWAY_MODEL,
+          stream: false,
+        },
+        AbortSignal.timeout(12000)
+      );
+      if (upstreamRes.ok) {
+        const data = await upstreamRes.json();
+        let content = data.choices?.[0]?.message?.content || "";
+        if (content.trim()) {
+          if (shouldCleanAsterisks) content = cleanAsterisks(content);
+          content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+          return NextResponse.json({
+            id: reqId,
+            object: "chat.completion",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content },
+              finish_reason: "stop",
+            }],
+            usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+          }, { headers: CORS_HEADERS });
+        }
+      }
+    } catch {}
+
+    // 2. High-Speed Secondary Cluster (Nabh Cloud)
     for (let attempt = 0; attempt < 2; attempt++) {
       const key = getNextNabhKey();
       try {

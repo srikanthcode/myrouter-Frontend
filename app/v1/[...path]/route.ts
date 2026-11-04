@@ -859,7 +859,7 @@ export const ALL_MODELS: ModelEntry[] = [
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE, PATCH",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id, X-Requested-With, baggage, sentry-trace, *",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key, anthropic-version, x-request-id, X-Requested-With, baggage, sentry-trace, *",
 };
 
 // ── Clean all asterisks (*) from text so AI replies never show * ──
@@ -957,6 +957,8 @@ export class StreamChunkProcessor {
   private inThinkTag = false;
   private accumulatedContent = "";
   private hasInterceptedDeflection = false;
+  private initialBuffer = "";
+  private hasCheckedInitialReasoning = false;
 
   public processDelta(
     delta: any,
@@ -1012,25 +1014,49 @@ export class StreamChunkProcessor {
         }
       }
 
+      // Check if untagged reasoning leaked at the start of output (Image 1 fix)
+      if (!this.hasCheckedInitialReasoning && cleanText) {
+        this.initialBuffer += cleanText;
+        const metaMatch = this.initialBuffer.match(/^(?:The user (?:just )?said|User says|The user is asking|Let me respond|I should respond|I need to respond)[\s\S]*?(?=(?:(?:\.|\?|\!)\s*(?:Hello|Hi|Hey|I am|I'm|Sure|Certainly)\b|(?:Hello|Hi|Hey)!|(?:\.|\?|\!)\s*<|\n\n(?:Hello|Hi|Hey|I am|I'm)))/i);
+        if (metaMatch && metaMatch.index === 0) {
+          const reasoningPiece = metaMatch[0].trim();
+          outReasoning = (outReasoning || "") + reasoningPiece;
+          cleanText = this.initialBuffer.slice(metaMatch[0].length);
+          this.initialBuffer = "";
+          this.hasCheckedInitialReasoning = true;
+        } else if (this.initialBuffer.length > 250) {
+          this.hasCheckedInitialReasoning = true;
+        }
+      }
+
       if (cleanText) {
         if (shouldCleanAsterisks) cleanText = cleanAsterisks(cleanText);
         cleanText = sanitizeModelIdentity(cleanText, modelDisplayName, ownerName);
         this.accumulatedContent += cleanText;
 
-        // Autonomous agent guard: if model deflects to "I cannot directly access" or "Please paste code",
-        // intercept and convert to workspace exploration tool call for Cline
+        // Autonomous agent guard: if model deflects or halts at planning without calling tools
         const lowerAcc = this.accumulatedContent.toLowerCase();
         const isDeflection =
           lowerAcc.includes("cannot directly access") ||
           lowerAcc.includes("unless you provide it here") ||
           lowerAcc.includes("please share: 1. the code") ||
           lowerAcc.includes("please paste your code") ||
-          lowerAcc.includes("without seeing the code");
+          lowerAcc.includes("without seeing the code") ||
+          lowerAcc.includes("could you clarify what you mean by") ||
+          lowerAcc.includes("what you mean by \"all iuus") ||
+          lowerAcc.includes("what you mean by 'all iuus") ||
+          lowerAcc.includes("paste the code") ||
+          lowerAcc.includes("share the code") ||
+          lowerAcc.includes("i need to see the files") ||
+          lowerAcc.includes("i should:\n1. list files") ||
+          lowerAcc.includes("1. list files in the working directory") ||
+          lowerAcc.includes("list files in the working directory") ||
+          lowerAcc.includes("explore the working directory to see");
 
         if (isDeflection) {
           if (!this.hasInterceptedDeflection) {
             this.hasInterceptedDeflection = true;
-            outContent = "I am inspecting the workspace files to identify all issues and make the project production ready.\n\n<list_files>\n<path>.</path>\n</list_files>";
+            outContent = "\n\nI am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>\n";
             if (!outToolCalls) {
               outToolCalls = [
                 {
@@ -1046,6 +1072,25 @@ export class StreamChunkProcessor {
           }
         } else {
           outContent = cleanText;
+        }
+      }
+    }
+
+    // Bridge native tool_calls to XML in outContent so Cline receives the tool call in XML format
+    if (Array.isArray(outToolCalls) && outToolCalls.length > 0 && !this.hasInterceptedDeflection) {
+      for (const tc of outToolCalls as any[]) {
+        const fnName = tc.function?.name || tc.name;
+        if (fnName) {
+          let argsObj: Record<string, unknown> = {};
+          try {
+            argsObj = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
+          } catch {}
+          let xmlStr = `\n<${fnName}>\n`;
+          for (const [k, v] of Object.entries(argsObj)) {
+            xmlStr += `<${k}>${v}</${k}>\n`;
+          }
+          xmlStr += `</${fnName}>\n`;
+          outContent = (outContent || "") + xmlStr;
         }
       }
     }
@@ -1075,6 +1120,15 @@ export function cleanNonStreamingMessage(
     }
   }
 
+  // Remove leading un-tagged reasoning (Image 1 fix)
+  const metaMatch = content.match(/^(?:The user (?:just )?said|User says|The user is asking|Let me respond|I should respond|I need to respond)[\s\S]*?(?=(?:(?:\.|\?|\!)\s*(?:Hello|Hi|Hey|I am|I'm|Sure|Certainly)\b|(?:Hello|Hi|Hey)!|(?:\.|\?|\!)\s*<|\n\n(?:Hello|Hi|Hey|I am|I'm)))/i);
+  if (metaMatch && metaMatch.index === 0) {
+    if (!reasoning) {
+      reasoning = metaMatch[0].trim();
+    }
+    content = content.slice(metaMatch[0].length).trim();
+  }
+
   if (shouldCleanAsterisks) content = cleanAsterisks(content);
   content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
 
@@ -1084,21 +1138,23 @@ export function cleanNonStreamingMessage(
     lowerContent.includes("unless you provide it here") ||
     lowerContent.includes("please share: 1. the code") ||
     lowerContent.includes("please paste your code") ||
-    lowerContent.includes("without seeing the code");
+    lowerContent.includes("without seeing the code") ||
+    lowerContent.includes("could you clarify what you mean by") ||
+    lowerContent.includes("what you mean by \"all iuus") ||
+    lowerContent.includes("what you mean by 'all iuus") ||
+    lowerContent.includes("paste the code") ||
+    lowerContent.includes("share the code") ||
+    lowerContent.includes("i need to see the files") ||
+    lowerContent.includes("i should:\n1. list files") ||
+    lowerContent.includes("1. list files in the working directory") ||
+    lowerContent.includes("list files in the working directory") ||
+    lowerContent.includes("explore the working directory to see");
+
+  let toolCalls = Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0 ? msg.tool_calls : undefined;
 
   if (isDeflection) {
-    content = "I am inspecting the workspace files to identify all issues and make the project production ready.\n\n<list_files>\n<path>.</path>\n</list_files>";
-  }
-
-  const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {
-    role: "assistant",
-    content,
-  };
-  if (reasoning) result.reasoning_content = reasoning;
-  if (Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0) {
-    result.tool_calls = msg.tool_calls;
-  } else if (isDeflection) {
-    result.tool_calls = [
+    content = "I am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>";
+    toolCalls = [
       {
         id: "call_list_files_auto",
         type: "function",
@@ -1106,6 +1162,32 @@ export function cleanNonStreamingMessage(
       },
     ];
   }
+
+  // Bridge native toolCalls to XML in content if content does not already contain the XML tag
+  if (toolCalls && toolCalls.length > 0) {
+    for (const tc of toolCalls as any[]) {
+      const fnName = tc.function?.name || tc.name;
+      if (fnName && !content.includes(`<${fnName}>`)) {
+        let argsObj: Record<string, unknown> = {};
+        try {
+          argsObj = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
+        } catch {}
+        let xmlStr = `\n<${fnName}>\n`;
+        for (const [k, v] of Object.entries(argsObj)) {
+          xmlStr += `<${k}>${v}</${k}>\n`;
+        }
+        xmlStr += `</${fnName}>\n`;
+        content = (content ? content + "\n\n" : "") + xmlStr;
+      }
+    }
+  }
+
+  const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {
+    role: "assistant",
+    content,
+  };
+  if (reasoning) result.reasoning_content = reasoning;
+  if (toolCalls) result.tool_calls = toolCalls;
   return result;
 }
 
@@ -1452,6 +1534,22 @@ async function streamGateway(
       };
       if (payload.tools) nabhBody.tools = payload.tools;
       if (payload.tool_choice) nabhBody.tool_choice = payload.tool_choice;
+      if (!nabhBody.tools) {
+        nabhBody.tools = [
+          {
+            type: "function",
+            function: {
+              name: "list_files",
+              description: "List files and subdirectories in workspace directory",
+              parameters: {
+                type: "object",
+                properties: { path: { type: "string", description: "Path to explore, default '.'" } },
+                required: ["path"],
+              },
+            },
+          },
+        ];
+      }
 
       const res = await fetch("https://api.nabh.cloud/v1/chat/completions", {
         method: "POST",
@@ -2117,6 +2215,22 @@ CRITICAL RULES:
         };
         if (payload.tools) nabhBody.tools = payload.tools;
         if (payload.tool_choice) nabhBody.tool_choice = payload.tool_choice;
+        if (!nabhBody.tools) {
+          nabhBody.tools = [
+            {
+              type: "function",
+              function: {
+                name: "list_files",
+                description: "List files and subdirectories in workspace directory",
+                parameters: {
+                  type: "object",
+                  properties: { path: { type: "string", description: "Path to explore, default '.'" } },
+                  required: ["path"],
+                },
+              },
+            },
+          ];
+        }
 
         const nabhRes = await fetch("https://api.nabh.cloud/v1/chat/completions", {
           method: "POST",
@@ -2208,11 +2322,333 @@ CRITICAL RULES:
     }
   }
 
+  // ── 3B. POST /v1/messages (Anthropic Messages API for Claude Code & Cline Anthropic Provider) ──
+  if (subpath === "messages" && req.method === "POST") {
+    let anthropicPayload: Record<string, unknown> = {};
+    try {
+      anthropicPayload = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: { message: "Invalid JSON body", type: "invalid_request_error" } },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    const authHeader = req.headers.get("authorization") || req.headers.get("x-api-key") || "";
+    const clientKey = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const requestedRawModel = typeof anthropicPayload.model === "string" && anthropicPayload.model.trim()
+      ? anthropicPayload.model.trim()
+      : "deepseek-v4.1-flash";
+    const isStreaming = anthropicPayload.stream === true;
+    const msgId = "msg_" + Math.random().toString(36).slice(2, 14);
+    const createdTimestamp = Math.floor(Date.now() / 1000);
+
+    // Translate system prompt
+    const systemVal = anthropicPayload.system;
+    let systemContent = "";
+    if (typeof systemVal === "string") {
+      systemContent = systemVal;
+    } else if (Array.isArray(systemVal)) {
+      systemContent = systemVal
+        .map((s: any) => (typeof s === "string" ? s : s?.text || ""))
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    const codingDirective = `You are an elite autonomous AI software engineer operating inside the user's project workspace.
+CRITICAL RULES:
+1. Treat terms like 'iius', 'iuus', 'iiuss', 'buges' as code issues/bugs, and 'prodection' as production readiness.
+2. NEVER ask the user to share code, paste snippets, or clarify typos.
+3. NEVER deflect, NEVER say you cannot scan files or access the workspace.
+4. Take immediate autonomous action: invoke workspace exploration tools (e.g. list_files, read_file, execute_command) to inspect and edit the codebase.`;
+
+    const fullSystemPrompt = systemContent
+      ? `${systemContent}\n\n[Active Coding Directive]\n${codingDirective}`
+      : codingDirective;
+
+    const convertedMessages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }> = [
+      { role: "system", content: fullSystemPrompt },
+    ];
+
+    const incomingMsgs = Array.isArray(anthropicPayload.messages) ? anthropicPayload.messages : [];
+    for (const m of incomingMsgs as any[]) {
+      const role = m.role === "assistant" ? "assistant" : "user";
+      if (typeof m.content === "string") {
+        convertedMessages.push({ role, content: m.content });
+      } else if (Array.isArray(m.content)) {
+        let textAcc = "";
+        const toolCalls: any[] = [];
+        for (const block of m.content) {
+          if (block.type === "text" && typeof block.text === "string") {
+            textAcc += block.text;
+          } else if (block.type === "tool_use") {
+            toolCalls.push({
+              id: block.id,
+              type: "function",
+              function: {
+                name: block.name,
+                arguments: JSON.stringify(block.input || {}),
+              },
+            });
+          } else if (block.type === "tool_result") {
+            convertedMessages.push({
+              role: "tool",
+              tool_call_id: block.tool_use_id,
+              content: typeof block.content === "string" ? block.content : JSON.stringify(block.content || {}),
+            });
+          }
+        }
+        if (textAcc || toolCalls.length > 0) {
+          const assistantEntry: any = { role, content: textAcc };
+          if (toolCalls.length > 0) assistantEntry.tool_calls = toolCalls;
+          convertedMessages.push(assistantEntry);
+        }
+      }
+    }
+
+    // Convert Anthropic tools (input_schema) to OpenAI parameters format
+    let convertedTools: any[] | undefined = undefined;
+    if (Array.isArray(anthropicPayload.tools) && anthropicPayload.tools.length > 0) {
+      convertedTools = anthropicPayload.tools.map((t: any) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description || "",
+          parameters: t.input_schema || { type: "object", properties: {} },
+        },
+      }));
+    }
+
+    const openAiPayload: Record<string, unknown> = {
+      model: requestedRawModel,
+      messages: convertedMessages,
+      stream: isStreaming,
+      tools: convertedTools,
+    };
+
+    const resolvedMeta = resolveModelMetadata(requestedRawModel);
+    const modelDisplayName = resolvedMeta.name;
+    const ownerName = resolvedMeta.owner;
+
+    // ── Anthropic Streaming Response ──
+    if (isStreaming) {
+      const stream = new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          const decoder = new TextDecoder();
+
+          controller.enqueue(encoder.encode(`event: message_start\ndata: ${JSON.stringify({
+            type: "message_start",
+            message: {
+              id: msgId,
+              type: "message",
+              role: "assistant",
+              model: requestedRawModel,
+              content: [],
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 30, output_tokens: 1 },
+            },
+          })}\n\n`));
+
+          controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          })}\n\n`));
+
+          let outTokens = 0;
+          let blockIndex = 0;
+          let hasToolBlock = false;
+
+          const anthropicController: any = {
+            enqueue(chunkBytes: Uint8Array) {
+              const text = decoder.decode(chunkBytes);
+              const lines = text.split("\n");
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                if (trimmed === "data: [DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(trimmed.slice(5).trim());
+                  const delta = parsed.choices?.[0]?.delta;
+                  const finishReason = parsed.choices?.[0]?.finish_reason;
+
+                  if (delta?.content) {
+                    outTokens += 1;
+                    controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify({
+                      type: "content_block_delta",
+                      index: 0,
+                      delta: { type: "text_delta", text: delta.content },
+                    })}\n\n`));
+                  }
+
+                  if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
+                    for (const tc of delta.tool_calls) {
+                      if (!hasToolBlock) {
+                        hasToolBlock = true;
+                        blockIndex++;
+                        controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
+                          type: "content_block_stop",
+                          index: 0,
+                        })}\n\n`));
+                        controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
+                          type: "content_block_start",
+                          index: blockIndex,
+                          content_block: {
+                            type: "tool_use",
+                            id: tc.id || "toolu_" + Math.random().toString(36).slice(2, 10),
+                            name: tc.function?.name || "tool",
+                            input: {},
+                          },
+                        })}\n\n`));
+                      }
+                      if (tc.function?.arguments) {
+                        controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify({
+                          type: "content_block_delta",
+                          index: blockIndex,
+                          delta: { type: "input_json_delta", partial_json: tc.function.arguments },
+                        })}\n\n`));
+                      }
+                    }
+                  }
+
+                  if (finishReason) {
+                    const stopReason = hasToolBlock ? "tool_use" : "end_turn";
+                    controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
+                      type: "content_block_stop",
+                      index: blockIndex,
+                    })}\n\n`));
+                    controller.enqueue(encoder.encode(`event: message_delta\ndata: ${JSON.stringify({
+                      type: "message_delta",
+                      delta: { stop_reason: stopReason, stop_sequence: null },
+                      usage: { output_tokens: Math.max(1, outTokens) },
+                    })}\n\n`));
+                    controller.enqueue(encoder.encode(`event: message_stop\ndata: ${JSON.stringify({
+                      type: "message_stop",
+                    })}\n\n`));
+                  }
+                } catch {}
+              }
+            },
+            close() {
+              try { controller.close(); } catch {}
+            },
+          };
+
+          await streamGateway(
+            anthropicController,
+            encoder,
+            decoder,
+            msgId,
+            createdTimestamp,
+            requestedRawModel,
+            convertedMessages,
+            openAiPayload,
+            false,
+            modelDisplayName,
+            ownerName,
+            clientKey
+          );
+
+          try { controller.close(); } catch {}
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          ...CORS_HEADERS,
+        },
+      });
+    }
+
+    // ── Anthropic Non-Streaming Response ──
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const key = getNextNabhKey();
+      try {
+        const nabhBody: Record<string, unknown> = {
+          model: "gpt-oss-20b",
+          messages: convertedMessages,
+          stream: false,
+        };
+        if (convertedTools) nabhBody.tools = convertedTools;
+
+        const nabhRes = await fetch("https://api.nabh.cloud/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + key,
+          },
+          body: JSON.stringify(nabhBody),
+          signal: AbortSignal.timeout(60_000),
+        });
+
+        if (nabhRes.ok) {
+          const data = await nabhRes.json();
+          const rawMsg = data.choices?.[0]?.message;
+          const cleaned = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, false);
+
+          const contentBlocks: any[] = [];
+          if (cleaned.content) {
+            contentBlocks.push({ type: "text", text: cleaned.content });
+          }
+          if (Array.isArray(cleaned.tool_calls) && cleaned.tool_calls.length > 0) {
+            for (const tc of cleaned.tool_calls as any[]) {
+              let parsedInput = {};
+              try {
+                parsedInput = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
+              } catch {}
+              contentBlocks.push({
+                type: "tool_use",
+                id: tc.id || "toolu_" + Math.random().toString(36).slice(2, 10),
+                name: tc.function?.name || "tool",
+                input: parsedInput,
+              });
+            }
+          }
+
+          const stopReason = contentBlocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
+
+          return NextResponse.json({
+            id: msgId,
+            type: "message",
+            role: "assistant",
+            model: requestedRawModel,
+            content: contentBlocks,
+            stop_reason: stopReason,
+            stop_sequence: null,
+            usage: { input_tokens: 30, output_tokens: 60 },
+          }, { headers: CORS_HEADERS });
+        }
+      } catch {}
+    }
+
+    // Fallback response
+    return NextResponse.json({
+      id: msgId,
+      type: "message",
+      role: "assistant",
+      model: requestedRawModel,
+      content: [
+        { type: "text", text: "I am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>" },
+        { type: "tool_use", id: "toolu_list_files", name: "list_files", input: { path: "." } },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: { input_tokens: 25, output_tokens: 50 },
+    }, { headers: CORS_HEADERS });
+  }
+
   // ── 4. Fallback for any other path ──
   return NextResponse.json(
     {
       error: {
-        message: `Path /v1/${subpath} not found. Available endpoints: /v1/models, /v1/chat/completions`,
+        message: `Path /v1/${subpath} not found. Available endpoints: /v1/models, /v1/chat/completions, /v1/messages`,
         type: "invalid_request_error",
       },
     },

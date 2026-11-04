@@ -940,6 +940,100 @@ export function cleanAsterisks(text: string): string {
   return res;
 }
 
+export class StreamChunkProcessor {
+  private inThinkTag = false;
+
+  public processDelta(
+    delta: any,
+    modelDisplayName: string,
+    ownerName: string,
+    shouldCleanAsterisks = false
+  ): { content?: string; reasoning_content?: string } {
+    let outContent: string | undefined = undefined;
+    let outReasoning: string | undefined = undefined;
+
+    // Upstream reasoning fields (never emit into content)
+    const upstreamReasoning = typeof delta?.reasoning_content === "string"
+      ? delta.reasoning_content
+      : typeof delta?.reasoning === "string"
+        ? delta.reasoning
+        : undefined;
+
+    if (upstreamReasoning) {
+      outReasoning = (outReasoning || "") + upstreamReasoning;
+    }
+
+    // Upstream content
+    if (typeof delta?.content === "string") {
+      let rawText = delta.content;
+      let cleanText = "";
+      let i = 0;
+
+      while (i < rawText.length) {
+        if (!this.inThinkTag) {
+          const openIdx = rawText.indexOf("<think>", i);
+          if (openIdx === -1) {
+            cleanText += rawText.slice(i);
+            break;
+          }
+          cleanText += rawText.slice(i, openIdx);
+          this.inThinkTag = true;
+          i = openIdx + 7;
+        } else {
+          const closeIdx = rawText.indexOf("</think>", i);
+          if (closeIdx === -1) {
+            outReasoning = (outReasoning || "") + rawText.slice(i);
+            break;
+          }
+          outReasoning = (outReasoning || "") + rawText.slice(i, closeIdx);
+          this.inThinkTag = false;
+          i = closeIdx + 8;
+        }
+      }
+
+      if (cleanText) {
+        if (shouldCleanAsterisks) cleanText = cleanAsterisks(cleanText);
+        cleanText = sanitizeModelIdentity(cleanText, modelDisplayName, ownerName);
+        outContent = cleanText;
+      }
+    }
+
+    return { content: outContent, reasoning_content: outReasoning };
+  }
+}
+
+export function cleanNonStreamingMessage(
+  msg: any,
+  modelDisplayName: string,
+  ownerName: string,
+  shouldCleanAsterisks = false
+): { role: string; content: string; reasoning_content?: string } {
+  let content = typeof msg?.content === "string" ? msg.content : "";
+  let reasoning = typeof msg?.reasoning_content === "string"
+    ? msg.reasoning_content
+    : typeof msg?.reasoning === "string"
+      ? msg.reasoning
+      : "";
+
+  if (content.includes("<think>")) {
+    const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+    if (thinkMatch) {
+      if (!reasoning) reasoning = thinkMatch[1].trim();
+      content = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    }
+  }
+
+  if (shouldCleanAsterisks) content = cleanAsterisks(content);
+  content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+
+  const result: { role: string; content: string; reasoning_content?: string } = {
+    role: "assistant",
+    content,
+  };
+  if (reasoning) result.reasoning_content = reasoning;
+  return result;
+}
+
 // ── Stream helper for Upstream AI Gateway ──
 async function streamGateway(
   controller: ReadableStreamDefaultController,
@@ -950,7 +1044,7 @@ async function streamGateway(
   requestedRawModel: string,
   effectiveMessages: unknown[],
   payload: Record<string, unknown>,
-  shouldCleanAsterisks = true,
+  shouldCleanAsterisks = false,
   modelDisplayName = requestedRawModel,
   ownerName = "prorouter",
   clientKey = ""
@@ -980,6 +1074,7 @@ async function streamGateway(
       clearInterval(pingInterval);
       const reader = upstreamRes.body.getReader();
       let buffer = "";
+      const processor = new StreamChunkProcessor();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1000,14 +1095,20 @@ async function streamGateway(
             const parsed = JSON.parse(trimmed.slice(5).trim());
             if (parsed.model) parsed.model = requestedRawModel;
             const delta = parsed.choices?.[0]?.delta;
-            if (delta) {
-              let content = delta.content || delta.reasoning_content || "";
-              if (shouldCleanAsterisks) {
-                content = cleanAsterisks(content);
-              }
-              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
-              delta.content = content;
+            const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
+
+            const chunkDelta: Record<string, string> = {};
+            if (processed.content !== undefined) chunkDelta.content = processed.content;
+            if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+
+            if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+              continue;
             }
+            if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+              chunkDelta.content = "";
+            }
+
+            emittedTokensCount++;
             const chunk = {
               id: reqId,
               object: "chat.completion.chunk",
@@ -1016,7 +1117,7 @@ async function streamGateway(
               choices: [
                 {
                   index: 0,
-                  delta: { content: delta?.content || "" },
+                  delta: chunkDelta,
                   finish_reason: parsed.choices?.[0]?.finish_reason || null,
                 },
               ],
@@ -1071,6 +1172,7 @@ async function streamGateway(
       clearInterval(pingInterval);
       const reader = reqRes.body.getReader();
       let buffer = "";
+      const processor = new StreamChunkProcessor();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1090,14 +1192,20 @@ async function streamGateway(
           try {
             const parsed = JSON.parse(trimmed.slice(5).trim());
             const delta = parsed.choices?.[0]?.delta;
-            if (delta) {
-              let content = delta.content || delta.reasoning_content || "";
-              if (shouldCleanAsterisks) {
-                content = cleanAsterisks(content);
-              }
-              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
-              delta.content = content;
+            const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
+
+            const chunkDelta: Record<string, string> = {};
+            if (processed.content !== undefined) chunkDelta.content = processed.content;
+            if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+
+            if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+              continue;
             }
+            if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+              chunkDelta.content = "";
+            }
+
+            emittedTokensCount++;
             const chunk = {
               id: reqId,
               object: "chat.completion.chunk",
@@ -1106,7 +1214,7 @@ async function streamGateway(
               choices: [
                 {
                   index: 0,
-                  delta: { content: delta?.content || "" },
+                  delta: chunkDelta,
                   finish_reason: parsed.choices?.[0]?.finish_reason || null,
                 },
               ],
@@ -1130,7 +1238,7 @@ async function streamGateway(
     // Continue to fallback clusters
   }
 
-  // ── Engine 2: High-Speed Secondary Cluster (Nabh Cloud) with strict persona rewriting ──
+  // ── Engine 2: High-Speed Secondary Cluster (Nabh Cloud) ──
   for (let attempt = 0; attempt < 3; attempt++) {
     const key = getNextNabhKey();
     try {
@@ -1152,6 +1260,7 @@ async function streamGateway(
         clearInterval(pingInterval);
         const reader = res.body.getReader();
         let buffer = "";
+        const processor = new StreamChunkProcessor();
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1171,14 +1280,20 @@ async function streamGateway(
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
               const delta = parsed.choices?.[0]?.delta;
-              if (delta && typeof delta.content === "string") {
-                let content = delta.content;
-                if (shouldCleanAsterisks) {
-                  content = cleanAsterisks(content);
-                }
-                content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
-                delta.content = content;
+              const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
+
+              const chunkDelta: Record<string, string> = {};
+              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+
+              if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+                continue;
               }
+              if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+                chunkDelta.content = "";
+              }
+
+              emittedTokensCount++;
               const chunk = {
                 id: reqId,
                 object: "chat.completion.chunk",
@@ -1187,7 +1302,7 @@ async function streamGateway(
                 choices: [
                   {
                     index: 0,
-                    delta: { content: delta?.content || "" },
+                    delta: chunkDelta,
                     finish_reason: parsed.choices?.[0]?.finish_reason || null,
                   },
                 ],
@@ -1197,6 +1312,13 @@ async function streamGateway(
           }
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        recordTelemetryRequest({
+          model: requestedRawModel,
+          totalTokens: Math.max(30, emittedTokensCount),
+          latencyMs: Date.now() - streamStartTime,
+          status: "success",
+          apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+        });
         controller.close();
         return;
       }
@@ -1223,6 +1345,7 @@ async function streamGateway(
       clearInterval(pingInterval);
       const reader = fmRes.body.getReader();
       let buffer = "";
+      const processor = new StreamChunkProcessor();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1242,14 +1365,20 @@ async function streamGateway(
           try {
             const parsed = JSON.parse(trimmed.slice(5).trim());
             const delta = parsed.choices?.[0]?.delta;
-            if (delta && typeof delta.content === "string") {
-              let content = delta.content;
-              if (shouldCleanAsterisks) {
-                content = cleanAsterisks(content);
-              }
-              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
-              delta.content = content;
+            const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
+
+            const chunkDelta: Record<string, string> = {};
+            if (processed.content !== undefined) chunkDelta.content = processed.content;
+            if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+
+            if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
+              continue;
             }
+            if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
+              chunkDelta.content = "";
+            }
+
+            emittedTokensCount++;
             const chunk = {
               id: reqId,
               object: "chat.completion.chunk",
@@ -1258,7 +1387,7 @@ async function streamGateway(
               choices: [
                 {
                   index: 0,
-                  delta: { content: delta?.content || "" },
+                  delta: chunkDelta,
                   finish_reason: parsed.choices?.[0]?.finish_reason || null,
                 },
               ],
@@ -1401,36 +1530,23 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const ownerName = resolvedMeta.owner;
     const isDeepSeek = requestedRawModel.toLowerCase().includes("deepseek");
 
-    const shouldCleanAsterisks = true;
+    const shouldCleanAsterisks = false;
     const isProRouter = ownerName.toLowerCase() === "prorouter";
     const modelOwner = isProRouter ? "developed by ProRouter" : ("developed by " + ownerName);
 
-    let identityDirective = "";
-    if (isDeepSeek) {
-      identityDirective = "You are DeepSeek (" + modelDisplayName + "), developed by DeepSeek. When asked about your name, identity, or creators, introduce yourself proudly as DeepSeek (" + modelDisplayName + ").";
-    } else {
-      identityDirective = "You are " + modelDisplayName + ", " + modelOwner + ". When asked about your name, identity, or creators, introduce yourself authentically as " + modelDisplayName + " (" + modelOwner + "). STRICT RULE: Absolutely NEVER say you are ChatGPT, OpenAI, or DeepSeek. You must strictly speak and act as " + modelDisplayName + ".";
-    }
-
-    const formattingDirective = " STRICT FORMATTING RULE: Absolutely NEVER use asterisks (*) anywhere in your response. Do not use markdown bold (**) or italic (*). For bullet points use hyphens (-). Keep all text 100% completely free of asterisks (*).";
-    const fullDirective = identityDirective + " Respond directly, helpfully, and professionally in the authentic voice and specialized domain of " + modelDisplayName + "." + formattingDirective;
-
     let effectiveMessages: unknown[] = [];
     if (!hasSystemMessage) {
+      const cleanPrompt = isDeepSeek
+        ? `You are DeepSeek (${modelDisplayName}), developed by DeepSeek. Respond directly, helpfully, and professionally.`
+        : `You are ${modelDisplayName}, developed by ${ownerName}. Respond directly, helpfully, and professionally.`;
       effectiveMessages = [
-        { role: "system", content: fullDirective },
+        { role: "system", content: cleanPrompt },
         ...incomingMessages,
       ];
     } else {
-      effectiveMessages = incomingMessages.map((m: unknown) => {
-        if (m && typeof m === "object" && "role" in m && ((m as { role?: string }).role === "system" || (m as { role?: string }).role === "developer")) {
-          return {
-            ...(m as Record<string, unknown>),
-            content: fullDirective + "\n\n" + ((m as { content?: string }).content || ""),
-          };
-        }
-        return m;
-      });
+      // Developer / coding agent provided custom system prompt (e.g. Cline, Cursor):
+      // Keep their system prompt completely intact without prepending conflicting identity rules.
+      effectiveMessages = incomingMessages;
     }
 
     const isTieredFreemodel = FREEMODELS_TIERED_MODELS.has(requestedRawModel.toLowerCase());
@@ -1578,15 +1694,15 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       );
       if (upstreamRes.ok) {
         const data = await upstreamRes.json();
-        let content = data.choices?.[0]?.message?.content || "";
-        if (content.trim()) {
-          if (shouldCleanAsterisks) content = cleanAsterisks(content);
-          content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+        const rawMsg = data.choices?.[0]?.message;
+        if (rawMsg) {
+          const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
           recordTelemetryRequest({
             model: requestedRawModel,
             totalTokens: data.usage?.total_tokens || 50,
             latencyMs: 1450,
             status: "success",
+            apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
           });
           return NextResponse.json({
             id: reqId,
@@ -1595,7 +1711,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             model: requestedRawModel,
             choices: [{
               index: 0,
-              message: { role: "assistant", content },
+              message: cleanedMsg,
               finish_reason: "stop",
             }],
             usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
@@ -1633,15 +1749,15 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
       if (reqRes.ok) {
         const data = await reqRes.json();
-        let content = data.choices?.[0]?.message?.content || "";
-        if (content.trim()) {
-          if (shouldCleanAsterisks) content = cleanAsterisks(content);
-          content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+        const rawMsg = data.choices?.[0]?.message;
+        if (rawMsg) {
+          const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
           recordTelemetryRequest({
             model: requestedRawModel,
             totalTokens: data.usage?.total_tokens || 50,
             latencyMs: 1450,
             status: "success",
+            apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
           });
           return NextResponse.json({
             id: reqId,
@@ -1650,7 +1766,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             model: requestedRawModel,
             choices: [{
               index: 0,
-              message: { role: "assistant", content },
+              message: cleanedMsg,
               finish_reason: "stop",
             }],
             usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
@@ -1679,10 +1795,9 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
         if (nabhRes.ok) {
           const data = await nabhRes.json();
-          let content = data.choices?.[0]?.message?.content || "";
-          if (content.trim()) {
-            if (shouldCleanAsterisks) content = cleanAsterisks(content);
-            content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+          const rawMsg = data.choices?.[0]?.message;
+          if (rawMsg) {
+            const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
             recordTelemetryRequest({
               model: requestedRawModel,
               totalTokens: data.usage?.total_tokens || 70,
@@ -1697,7 +1812,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               model: requestedRawModel,
               choices: [{
                 index: 0,
-                message: { role: "assistant", content },
+                message: cleanedMsg,
                 finish_reason: "stop",
               }],
               usage: data.usage || { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
@@ -1727,9 +1842,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           data.model = requestedRawModel;
           if (Array.isArray(data.choices)) {
             for (const choice of data.choices) {
-              if (choice?.message?.content && typeof choice.message.content === "string") {
-                if (shouldCleanAsterisks) { choice.message.content = cleanAsterisks(choice.message.content); }
-                choice.message.content = sanitizeModelIdentity(choice.message.content, modelDisplayName, ownerName);
+              if (choice?.message) {
+                choice.message = cleanNonStreamingMessage(choice.message, modelDisplayName, ownerName, shouldCleanAsterisks);
               }
             }
           }

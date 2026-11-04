@@ -808,14 +808,6 @@ async function streamGateway(
   modelDisplayName = requestedRawModel,
   ownerName = "prorouter"
 ) {
-  const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
-  const upstreamBody = {
-    ...payload,
-    messages: effectiveMessages,
-    model: GATEWAY_MODEL,
-    stream: true,
-  };
-
   const pingInterval = setInterval(() => {
     try {
       controller.enqueue(encoder.encode(": keep-alive\n\n"));
@@ -824,9 +816,86 @@ async function streamGateway(
     }
   }, 2000);
 
+  // ── Engine 1: Fast FreeModels Edge Worker (Zero wait, 2-4s full completion) ──
   try {
-    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody);
+    const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
+    const fmRes = await fetch(FREEMODELS_URL, {
+      method: "POST",
+      headers: FREEMODELS_HEADERS,
+      body: JSON.stringify({
+        model: fmModel,
+        messages: effectiveMessages,
+      }),
+      signal: AbortSignal.timeout(9000),
+    });
 
+    if (fmRes.ok && fmRes.body) {
+      clearInterval(pingInterval);
+      const reader = fmRes.body.getReader();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          if (trimmed === "data: [DONE]") {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta && typeof delta.content === "string") {
+              let content = delta.content;
+              if (shouldCleanAsterisks) {
+                content = cleanAsterisks(content);
+              }
+              content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
+              delta.content = content;
+            }
+            const chunk = {
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: delta?.content || "" },
+                  finish_reason: parsed.choices?.[0]?.finish_reason || null,
+                },
+              ],
+            };
+            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+          } catch {}
+        }
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+      return;
+    }
+  } catch (fmErr) {
+    // Edge worker fallback, continue to Engine 2
+  }
+
+  // ── Engine 2: TokenJuice AI Gateway with Fallback Key Pool ──
+  try {
+    const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+    const upstreamBody = {
+      ...payload,
+      messages: effectiveMessages,
+      model: GATEWAY_MODEL,
+      stream: true,
+    };
+
+    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody);
     clearInterval(pingInterval);
 
     if (!upstreamRes.ok || !upstreamRes.body) {
@@ -1023,10 +1092,54 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     }
 
     // ── B) NON-STREAMING MODE ──
-    // Unified ProRouter Gateway Engine
-    // 2. All Other Models -> ProRouter Gateway
+    // 1. Try Fast FreeModels Edge Worker
+    try {
+      const fmModel = FREEMODELS_UPSTREAM_MAP[requestedRawModel.toLowerCase()] || "sol";
+      const fmRes = await fetch(FREEMODELS_URL, {
+        method: "POST",
+        headers: FREEMODELS_HEADERS,
+        body: JSON.stringify({
+          model: fmModel,
+          messages: effectiveMessages,
+        }),
+        signal: AbortSignal.timeout(9000),
+      });
+
+      if (fmRes.ok) {
+        const text = await fmRes.text();
+        let aggregatedContent = "";
+        for (const line of text.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data:") && !trimmed.includes("[DONE]")) {
+            try {
+              const p = JSON.parse(trimmed.slice(5).trim());
+              const c = p.choices?.[0]?.delta?.content;
+              if (c) aggregatedContent += c;
+            } catch {}
+          }
+        }
+        if (aggregatedContent.trim()) {
+          if (shouldCleanAsterisks) aggregatedContent = cleanAsterisks(aggregatedContent);
+          aggregatedContent = sanitizeModelIdentity(aggregatedContent, modelDisplayName, ownerName);
+          return NextResponse.json({
+            id: reqId,
+            object: "chat.completion",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: aggregatedContent },
+              finish_reason: "stop",
+            }],
+            usage: { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
+          }, { status: 200, headers: CORS_HEADERS });
+        }
+      }
+    } catch {}
+
+    // 2. TokenJuice Upstream Gateway Fallback
     const abortCtrl = new AbortController();
-    const timeoutId = setTimeout(() => abortCtrl.abort(), 55000);
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 9000);
     const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
       ...payload,

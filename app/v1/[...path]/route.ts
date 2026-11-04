@@ -1749,11 +1749,32 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const modelOwner = isProRouter ? "developed by ProRouter" : ("developed by " + ownerName);
 
     let effectiveMessages: unknown[] = [];
-    const codingDirective = `You are an elite autonomous AI software engineer. You have deep expertise in analyzing, writing, debugging, and fixing full-stack code across all programming languages.
-When the user asks you to find bugs, fix problems, or code (even with typos like 'iius', 'iuus', 'buges'), NEVER deflect, NEVER say you cannot scan files, and NEVER ask trivial clarifying questions.
-Immediately take proactive action:
-1. If workspace tools are available (list_files, read_file, write_to_file, execute_command), invoke them immediately to inspect and edit the codebase.
-2. If tools are not attached, immediately write complete, functional, production-ready code with step-by-step solutions or runnable diagnostic scripts.`;
+    const codingDirective = `You are an elite autonomous AI software engineer operating inside the user's project workspace in VS Code.
+CRITICAL RULES:
+1. Treat terms like 'iius', 'iuus', 'iiuss', 'buges' as code issues/bugs, and 'prodection' as production readiness.
+2. NEVER ask the user to share code, paste snippets, or clarify typos.
+3. NEVER deflect, NEVER say you cannot scan files or access the workspace.
+4. Take immediate autonomous action:
+   - If workspace tools are available (list_files, read_file, write_to_file, execute_command), invoke them immediately (starting with list_files or read_file) to explore and edit the project files.
+   - If tools are not attached, immediately provide full, production-ready, functional code solutions for the codebase.`;
+
+    // Filter out previous assistant conversational deflections so the model doesn't copycat past errors:
+    const sanitizedIncoming = incomingMessages.map((m: any) => {
+      if (m && m.role === "assistant" && typeof m.content === "string") {
+        if (
+          m.content.includes("Could you share the code") ||
+          m.content.includes("Without seeing the code") ||
+          m.content.includes("Please paste your code") ||
+          m.content.includes("correcting instances of \"IIUSS\"")
+        ) {
+          return {
+            ...m,
+            content: "Understood. I will immediately inspect the workspace files and resolve all issues.",
+          };
+        }
+      }
+      return m;
+    });
 
     if (!hasSystemMessage) {
       const cleanPrompt = isDeepSeek
@@ -1761,12 +1782,11 @@ Immediately take proactive action:
         : `You are ${modelDisplayName}, developed by ${ownerName}.\n\n${codingDirective}`;
       effectiveMessages = [
         { role: "system", content: cleanPrompt },
-        ...incomingMessages,
+        ...sanitizedIncoming,
       ];
     } else {
       // For coding agents (Cline, Cursor, etc.):
-      // Append the coding directive to their existing system prompt so the model actively codes instead of chatting!
-      effectiveMessages = incomingMessages.map((m: any) => {
+      effectiveMessages = sanitizedIncoming.map((m: any) => {
         if (m && (m.role === "system" || m.role === "developer")) {
           return {
             ...m,

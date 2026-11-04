@@ -153,7 +153,22 @@ const FREEMODELS_TIERED_MODELS = new Set([
 ]);
 
 const REQUESTY_BASE = (process.env.PROVIDER_REQUESTY_BASE_URL || "https://router.requesty.ai/v1").replace(/\/+$/, "");
-const REQUESTY_API_KEY = (process.env.PROVIDER_REQUESTY_API_KEY || "").split(/[\s,;\n]+/)[0] || "rqsty-sk-Rwqk+k5bTmyQzu0m0YW7ES32tRYd7lx1QapSNITPF5dXjiPpduVEPT1Cw4h1Wo5xBkysmfRQD4VIwKCbQsbFj1uc+tXBSpzVe27DA2S6ZQ0=";
+const REQUESTY_FALLBACK_KEYS = [
+  "rqsty-sk-eZDZIylOTvmLRd0c2tVrNAAqHeawYeRZrVSJYOrOlW3zFeakaX8fdeiO4MOkD69L8AbUQ1zJpSRkIvUmiquvaPuEl1zU7eiIq61MN75n/gU=",
+  "rqsty-sk-Rwqk+k5bTmyQzu0m0YW7ES32tRYd7lx1QapSNITPF5dXjiPpduVEPT1Cw4h1Wo5xBkysmfRQD4VIwKCbQsbFj1uc+tXBSpzVe27DA2S6ZQ0=",
+];
+let requestyCursor = 0;
+function getRequestyKey(): string {
+  const envVal = (process.env.PROVIDER_REQUESTY_API_KEY || "").trim();
+  if (envVal) {
+    const list = envVal.split(/[\s,;\n]+/).filter(Boolean);
+    if (list.length > 0) return list[0];
+  }
+  const k = REQUESTY_FALLBACK_KEYS[requestyCursor % REQUESTY_FALLBACK_KEYS.length];
+  requestyCursor++;
+  return k;
+}
+const REQUESTY_API_KEY = getRequestyKey();
 
 export const REQUESTY_MODELS_MAP: Record<string, string> = {
   "leanstral-1-5": "mistral/leanstral-1-5",

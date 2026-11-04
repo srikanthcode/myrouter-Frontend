@@ -1089,15 +1089,68 @@ async function streamGateway(
         stream: true,
       };
 
-      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(2500));
+      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(3500));
       if (upstreamRes.ok && upstreamRes.body) {
-        clearInterval(pingInterval);
         const reader = upstreamRes.body.getReader();
+
+        // Guard against stalled GPU inference queues: wait at most 4s for first chunk
+        let firstRead: { done: boolean; value?: Uint8Array };
+        try {
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("First chunk timeout")), 4000)
+          );
+          firstRead = await Promise.race([reader.read(), timeoutPromise]);
+        } catch (firstErr) {
+          reader.cancel().catch(() => {});
+          throw firstErr;
+        }
+
+        if (firstRead.done) {
+          throw new Error("Upstream stream ended with no content");
+        }
+
+        clearInterval(pingInterval);
         let buffer = "";
         const processor = new StreamChunkProcessor();
 
         let lastFinishReason: string | null = null;
         let hasSeenToolCalls = false;
+
+        // Process first chunk
+        if (firstRead.value) {
+          buffer += decoder.decode(firstRead.value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            if (trimmed === "data: [DONE]") continue;
+            try {
+              const parsed = JSON.parse(trimmed.slice(5).trim());
+              if (parsed.model) parsed.model = requestedRawModel;
+              const delta = parsed.choices?.[0]?.delta;
+              const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
+              const chunkDelta: Record<string, unknown> = {};
+              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+              if (processed.tool_calls !== undefined) {
+                chunkDelta.tool_calls = processed.tool_calls;
+                hasSeenToolCalls = true;
+              }
+              if (parsed.choices?.[0]?.finish_reason) lastFinishReason = parsed.choices[0].finish_reason;
+              if (Object.keys(chunkDelta).length > 0 || parsed.choices?.[0]?.finish_reason) {
+                emittedTokensCount++;
+                controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                  id: reqId,
+                  object: "chat.completion.chunk",
+                  created: createdTimestamp,
+                  model: requestedRawModel,
+                  choices: [{ index: 0, delta: chunkDelta, finish_reason: parsed.choices?.[0]?.finish_reason || null }],
+                }) + "\n\n"));
+              }
+            } catch { }
+          }
+        }
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1221,7 +1274,7 @@ async function streamGateway(
           model: reqModel,
           stream: true,
         }),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (reqRes.ok && reqRes.body) {
@@ -1348,7 +1401,7 @@ async function streamGateway(
           "Authorization": "Bearer " + key,
         },
         body: JSON.stringify(nabhBody),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (res.ok && res.body) {
@@ -1466,7 +1519,7 @@ async function streamGateway(
         model: fmModel,
         messages: effectiveMessages,
       }),
-      signal: AbortSignal.timeout(9000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (fmRes.ok && fmRes.body) {
@@ -1927,7 +1980,7 @@ Immediately take proactive action:
             model: reqModel,
             stream: false,
           }),
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(30_000),
         });
 
         if (reqRes.ok) {
@@ -1979,7 +2032,7 @@ Immediately take proactive action:
             "Authorization": "Bearer " + key,
           },
           body: JSON.stringify(nabhBody),
-          signal: AbortSignal.timeout(9000),
+          signal: AbortSignal.timeout(60_000),
         });
 
         if (nabhRes.ok) {
@@ -2013,7 +2066,7 @@ Immediately take proactive action:
 
     // 2. Fallback to TokenJuice
     const abortCtrl = new AbortController();
-    const timeoutId = setTimeout(() => abortCtrl.abort(), 9000);
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 25_000);
     const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
     const upstreamBody = {
       ...payload,

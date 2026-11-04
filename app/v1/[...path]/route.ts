@@ -948,9 +948,15 @@ export class StreamChunkProcessor {
     modelDisplayName: string,
     ownerName: string,
     shouldCleanAsterisks = false
-  ): { content?: string; reasoning_content?: string } {
+  ): { content?: string; reasoning_content?: string; tool_calls?: unknown[] } {
     let outContent: string | undefined = undefined;
     let outReasoning: string | undefined = undefined;
+    let outToolCalls: unknown[] | undefined = undefined;
+
+    // Upstream tool_calls preservation (essential for coding agents like Cline/Cursor)
+    if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
+      outToolCalls = delta.tool_calls;
+    }
 
     // Upstream reasoning fields (never emit into content)
     const upstreamReasoning = typeof delta?.reasoning_content === "string"
@@ -998,7 +1004,7 @@ export class StreamChunkProcessor {
       }
     }
 
-    return { content: outContent, reasoning_content: outReasoning };
+    return { content: outContent, reasoning_content: outReasoning, tool_calls: outToolCalls };
   }
 }
 
@@ -1007,7 +1013,7 @@ export function cleanNonStreamingMessage(
   modelDisplayName: string,
   ownerName: string,
   shouldCleanAsterisks = false
-): { role: string; content: string; reasoning_content?: string } {
+): { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } {
   let content = typeof msg?.content === "string" ? msg.content : "";
   let reasoning = typeof msg?.reasoning_content === "string"
     ? msg.reasoning_content
@@ -1026,11 +1032,14 @@ export function cleanNonStreamingMessage(
   if (shouldCleanAsterisks) content = cleanAsterisks(content);
   content = sanitizeModelIdentity(content, modelDisplayName, ownerName);
 
-  const result: { role: string; content: string; reasoning_content?: string } = {
+  const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {
     role: "assistant",
     content,
   };
   if (reasoning) result.reasoning_content = reasoning;
+  if (Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0) {
+    result.tool_calls = msg.tool_calls;
+  }
   return result;
 }
 
@@ -1069,7 +1078,7 @@ async function streamGateway(
       stream: true,
     };
 
-    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(10000));
+    const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(3000));
     if (upstreamRes.ok && upstreamRes.body) {
       clearInterval(pingInterval);
       const reader = upstreamRes.body.getReader();
@@ -1097,15 +1106,18 @@ async function streamGateway(
             const delta = parsed.choices?.[0]?.delta;
             const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-            const chunkDelta: Record<string, string> = {};
+            const chunkDelta: Record<string, unknown> = {};
             if (processed.content !== undefined) chunkDelta.content = processed.content;
             if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
 
             if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
               continue;
             }
             if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-              chunkDelta.content = "";
+              if (parsed.choices[0].finish_reason !== "tool_calls") {
+                chunkDelta.content = "";
+              }
             }
 
             emittedTokensCount++;
@@ -1194,15 +1206,18 @@ async function streamGateway(
             const delta = parsed.choices?.[0]?.delta;
             const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-            const chunkDelta: Record<string, string> = {};
+            const chunkDelta: Record<string, unknown> = {};
             if (processed.content !== undefined) chunkDelta.content = processed.content;
             if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
 
             if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
               continue;
             }
             if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-              chunkDelta.content = "";
+              if (parsed.choices[0].finish_reason !== "tool_calls") {
+                chunkDelta.content = "";
+              }
             }
 
             emittedTokensCount++;
@@ -1242,17 +1257,22 @@ async function streamGateway(
   for (let attempt = 0; attempt < 3; attempt++) {
     const key = getNextNabhKey();
     try {
+      const nabhBody: Record<string, unknown> = {
+        ...payload,
+        model: "gpt-oss-20b",
+        messages: effectiveMessages,
+        stream: true,
+      };
+      if (payload.tools) nabhBody.tools = payload.tools;
+      if (payload.tool_choice) nabhBody.tool_choice = payload.tool_choice;
+
       const res = await fetch("https://api.nabh.cloud/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer " + key,
         },
-        body: JSON.stringify({
-          model: "gpt-oss-20b",
-          messages: effectiveMessages,
-          stream: true,
-        }),
+        body: JSON.stringify(nabhBody),
         signal: AbortSignal.timeout(8000),
       });
 
@@ -1282,15 +1302,18 @@ async function streamGateway(
               const delta = parsed.choices?.[0]?.delta;
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-              const chunkDelta: Record<string, string> = {};
+              const chunkDelta: Record<string, unknown> = {};
               if (processed.content !== undefined) chunkDelta.content = processed.content;
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
 
               if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
                 continue;
               }
               if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-                chunkDelta.content = "";
+                if (parsed.choices[0].finish_reason !== "tool_calls") {
+                  chunkDelta.content = "";
+                }
               }
 
               emittedTokensCount++;
@@ -1367,15 +1390,18 @@ async function streamGateway(
             const delta = parsed.choices?.[0]?.delta;
             const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
-            const chunkDelta: Record<string, string> = {};
+            const chunkDelta: Record<string, unknown> = {};
             if (processed.content !== undefined) chunkDelta.content = processed.content;
             if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
+            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
 
             if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
               continue;
             }
             if (Object.keys(chunkDelta).length === 0 && parsed.choices?.[0]?.finish_reason) {
-              chunkDelta.content = "";
+              if (parsed.choices[0].finish_reason !== "tool_calls") {
+                chunkDelta.content = "";
+              }
             }
 
             emittedTokensCount++;
@@ -1767,7 +1793,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             choices: [{
               index: 0,
               message: cleanedMsg,
-              finish_reason: "stop",
+              finish_reason: data.choices?.[0]?.finish_reason || (cleanedMsg.tool_calls ? "tool_calls" : "stop"),
             }],
             usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
           }, { headers: CORS_HEADERS });
@@ -1779,17 +1805,22 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const key = getNextNabhKey();
       try {
+        const nabhBody: Record<string, unknown> = {
+          ...payload,
+          model: "gpt-oss-20b",
+          messages: effectiveMessages,
+          stream: false,
+        };
+        if (payload.tools) nabhBody.tools = payload.tools;
+        if (payload.tool_choice) nabhBody.tool_choice = payload.tool_choice;
+
         const nabhRes = await fetch("https://api.nabh.cloud/v1/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + key,
           },
-          body: JSON.stringify({
-            model: "gpt-oss-20b",
-            messages: effectiveMessages,
-            stream: false,
-          }),
+          body: JSON.stringify(nabhBody),
           signal: AbortSignal.timeout(9000),
         });
 
@@ -1813,7 +1844,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               choices: [{
                 index: 0,
                 message: cleanedMsg,
-                finish_reason: "stop",
+                finish_reason: data.choices?.[0]?.finish_reason || (cleanedMsg.tool_calls ? "tool_calls" : "stop"),
               }],
               usage: data.usage || { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
             }, { status: 200, headers: CORS_HEADERS });

@@ -1096,6 +1096,9 @@ async function streamGateway(
         let buffer = "";
         const processor = new StreamChunkProcessor();
 
+        let lastFinishReason: string | null = null;
+        let hasSeenToolCalls = false;
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -1108,6 +1111,16 @@ async function streamGateway(
             const trimmed = line.trim();
             if (!trimmed.startsWith("data:")) continue;
             if (trimmed === "data: [DONE]") {
+              if (!lastFinishReason) {
+                lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+                controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                  id: reqId,
+                  object: "chat.completion.chunk",
+                  created: createdTimestamp,
+                  model: requestedRawModel,
+                  choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+                }) + "\n\n"));
+              }
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               continue;
             }
@@ -1120,7 +1133,14 @@ async function streamGateway(
               const chunkDelta: Record<string, unknown> = {};
               if (processed.content !== undefined) chunkDelta.content = processed.content;
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+              if (processed.tool_calls !== undefined) {
+                chunkDelta.tool_calls = processed.tool_calls;
+                hasSeenToolCalls = true;
+              }
+
+              if (parsed.choices?.[0]?.finish_reason) {
+                lastFinishReason = parsed.choices[0].finish_reason;
+              }
 
               if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
                 continue;
@@ -1148,6 +1168,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (!lastFinishReason) {
+          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+          }) + "\n\n"));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -1200,6 +1230,9 @@ async function streamGateway(
         let buffer = "";
         const processor = new StreamChunkProcessor();
 
+        let lastFinishReason: string | null = null;
+        let hasSeenToolCalls = false;
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -1212,6 +1245,16 @@ async function streamGateway(
             const trimmed = line.trim();
             if (!trimmed.startsWith("data:")) continue;
             if (trimmed === "data: [DONE]") {
+              if (!lastFinishReason) {
+                lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+                controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                  id: reqId,
+                  object: "chat.completion.chunk",
+                  created: createdTimestamp,
+                  model: requestedRawModel,
+                  choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+                }) + "\n\n"));
+              }
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               continue;
             }
@@ -1223,7 +1266,14 @@ async function streamGateway(
               const chunkDelta: Record<string, unknown> = {};
               if (processed.content !== undefined) chunkDelta.content = processed.content;
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+              if (processed.tool_calls !== undefined) {
+                chunkDelta.tool_calls = processed.tool_calls;
+                hasSeenToolCalls = true;
+              }
+
+              if (parsed.choices?.[0]?.finish_reason) {
+                lastFinishReason = parsed.choices[0].finish_reason;
+              }
 
               if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
                 continue;
@@ -1251,6 +1301,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (!lastFinishReason) {
+          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+          }) + "\n\n"));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -1297,6 +1357,9 @@ async function streamGateway(
         let buffer = "";
         const processor = new StreamChunkProcessor();
 
+        let lastFinishReason: string | null = null;
+        let hasSeenToolCalls = false;
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -1309,6 +1372,16 @@ async function streamGateway(
             const trimmed = line.trim();
             if (!trimmed.startsWith("data:")) continue;
             if (trimmed === "data: [DONE]") {
+              if (!lastFinishReason) {
+                lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+                controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                  id: reqId,
+                  object: "chat.completion.chunk",
+                  created: createdTimestamp,
+                  model: requestedRawModel,
+                  choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+                }) + "\n\n"));
+              }
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               continue;
             }
@@ -1320,7 +1393,14 @@ async function streamGateway(
               const chunkDelta: Record<string, unknown> = {};
               if (processed.content !== undefined) chunkDelta.content = processed.content;
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-              if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+              if (processed.tool_calls !== undefined) {
+                chunkDelta.tool_calls = processed.tool_calls;
+                hasSeenToolCalls = true;
+              }
+
+              if (parsed.choices?.[0]?.finish_reason) {
+                lastFinishReason = parsed.choices[0].finish_reason;
+              }
 
               if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
                 continue;
@@ -1348,6 +1428,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (!lastFinishReason) {
+          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+          }) + "\n\n"));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -1385,6 +1475,9 @@ async function streamGateway(
       let buffer = "";
       const processor = new StreamChunkProcessor();
 
+      let lastFinishReason: string | null = null;
+      let hasSeenToolCalls = false;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -1397,6 +1490,16 @@ async function streamGateway(
           const trimmed = line.trim();
           if (!trimmed.startsWith("data:")) continue;
           if (trimmed === "data: [DONE]") {
+            if (!lastFinishReason) {
+              lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+              }) + "\n\n"));
+            }
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             continue;
           }
@@ -1408,7 +1511,14 @@ async function streamGateway(
             const chunkDelta: Record<string, unknown> = {};
             if (processed.content !== undefined) chunkDelta.content = processed.content;
             if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
-            if (processed.tool_calls !== undefined) chunkDelta.tool_calls = processed.tool_calls;
+            if (processed.tool_calls !== undefined) {
+              chunkDelta.tool_calls = processed.tool_calls;
+              hasSeenToolCalls = true;
+            }
+
+            if (parsed.choices?.[0]?.finish_reason) {
+              lastFinishReason = parsed.choices[0].finish_reason;
+            }
 
             if (Object.keys(chunkDelta).length === 0 && !parsed.choices?.[0]?.finish_reason) {
               continue;
@@ -1436,6 +1546,16 @@ async function streamGateway(
             controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
           } catch { }
         }
+      }
+      if (!lastFinishReason) {
+        lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+        controller.enqueue(encoder.encode("data: " + JSON.stringify({
+          id: reqId,
+          object: "chat.completion.chunk",
+          created: createdTimestamp,
+          model: requestedRawModel,
+          choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+        }) + "\n\n"));
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       recordTelemetryRequest({
@@ -1779,49 +1899,49 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           reqModel = "mistral/leanstral-1-5";
         }
 
-      const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + reqKey,
-        },
-        body: JSON.stringify({
-          ...payload,
-          messages: effectiveMessages,
-          model: reqModel,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
+        const reqRes = await fetch(`${REQUESTY_BASE}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + reqKey,
+          },
+          body: JSON.stringify({
+            ...payload,
+            messages: effectiveMessages,
+            model: reqModel,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
 
-      if (reqRes.ok) {
-        const data = await reqRes.json();
-        const rawMsg = data.choices?.[0]?.message;
-        if (rawMsg) {
-          const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
-          recordTelemetryRequest({
-            model: requestedRawModel,
-            totalTokens: data.usage?.total_tokens || 50,
-            latencyMs: 1450,
-            status: "success",
-            apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
-          });
-          return NextResponse.json({
-            id: reqId,
-            object: "chat.completion",
-            created: createdTimestamp,
-            model: requestedRawModel,
-            choices: [{
-              index: 0,
-              message: cleanedMsg,
-              finish_reason: data.choices?.[0]?.finish_reason || (cleanedMsg.tool_calls ? "tool_calls" : "stop"),
-            }],
-            usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
-          }, { headers: CORS_HEADERS });
+        if (reqRes.ok) {
+          const data = await reqRes.json();
+          const rawMsg = data.choices?.[0]?.message;
+          if (rawMsg) {
+            const cleanedMsg = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, shouldCleanAsterisks);
+            recordTelemetryRequest({
+              model: requestedRawModel,
+              totalTokens: data.usage?.total_tokens || 50,
+              latencyMs: 1450,
+              status: "success",
+              apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+            });
+            return NextResponse.json({
+              id: reqId,
+              object: "chat.completion",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{
+                index: 0,
+                message: cleanedMsg,
+                finish_reason: data.choices?.[0]?.finish_reason || (cleanedMsg.tool_calls ? "tool_calls" : "stop"),
+              }],
+              usage: data.usage || { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+            }, { headers: CORS_HEADERS });
+          }
         }
-      }
-    } catch { }
-  }
+      } catch { }
+    }
 
     // 2. High-Speed Secondary Cluster (Nabh Cloud)
     for (let attempt = 0; attempt < 2; attempt++) {

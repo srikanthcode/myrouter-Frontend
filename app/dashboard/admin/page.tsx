@@ -28,7 +28,6 @@ import { Badge, Button, Card, Input, Skeleton, useToast } from "@/components/ui"
 import { useSession } from "@/components/DashboardShell";
 import { MODEL_PROFILES_500 } from "@/lib/model-profiles-data";
 import {
-  CREDIT_PACKAGES,
   DEFAULT_TARGET_GROSS_MARGIN,
   DEFAULT_USD_TO_INR_RATE,
   calculateSellingPrice,
@@ -622,11 +621,11 @@ export default function AdminPage() {
               Configure global price floors, gross margin multipliers, and currency conversion settings. The system recalculates selling prices using the formula:
               <br />
               <code className="mt-1 inline-block rounded bg-panel2 px-2 py-1 font-mono text-accent">
-                Selling Price = Provider Cost / (1 - Target Gross Margin)
+                Customer Selling Price = (Upstream Cost * (1 + Operational Reserve)) / (1 - Target Gross Margin)
               </code>
             </p>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-xl border border-line bg-panel2/60 p-4 space-y-2">
                 <label className="text-xs font-semibold text-fg flex items-center justify-between">
                   <span>Target Gross Margin (%)</span>
@@ -641,12 +640,28 @@ export default function AdminPage() {
                   onChange={(e) => setTargetMargin(Number(e.target.value))}
                   className="w-full accent-accent cursor-pointer"
                 />
-                <p className="text-[11px] text-mut">Default: 45%. Balances strong commercial margins with developer affordability.</p>
+                <p className="text-[11px] text-mut">Default: 30%. Configurable target margin across catalogue.</p>
               </div>
 
               <div className="rounded-xl border border-line bg-panel2/60 p-4 space-y-2">
                 <label className="text-xs font-semibold text-fg flex items-center justify-between">
-                  <span>USD to INR Exchange Display Setting</span>
+                  <span>Operational Reserve (%)</span>
+                  <span className="font-mono text-accent">10%</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="30"
+                  step="5"
+                  defaultValue="10"
+                  className="w-full accent-accent cursor-pointer"
+                />
+                <p className="text-[11px] text-mut">Default: 10% (1.10 multiplier). Buffers network retry and token variance.</p>
+              </div>
+
+              <div className="rounded-xl border border-line bg-panel2/60 p-4 space-y-2">
+                <label className="text-xs font-semibold text-fg flex items-center justify-between">
+                  <span>USD to INR Exchange Policy</span>
                   <span className="font-mono text-accent">₹{usdToInrRate} / $1.00</span>
                 </label>
                 <input
@@ -655,7 +670,7 @@ export default function AdminPage() {
                   onChange={(e) => setUsdToInrRate(Number(e.target.value))}
                   className="w-full rounded-lg border border-line bg-panel px-3 py-1.5 text-xs font-mono text-fg focus:border-accent focus:outline-none"
                 />
-                <p className="text-[11px] text-mut">Platform configurable setting. Provides India developer localized rates.</p>
+                <p className="text-[11px] text-mut">₹80.00 display rate gives Indian developers a localized ~10% discount.</p>
               </div>
             </div>
 
@@ -776,7 +791,7 @@ export default function AdminPage() {
                 <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 flex items-center justify-between">
                   <div>
                     <div className="text-xs font-semibold text-fg">Qwen3.8-27B</div>
-                    <div className="font-mono text-[10px] text-accent">qwen-2.5-coder-32b / qwen3.8-27b</div>
+                    <div className="font-mono text-[10px] text-accent">qwen3.8-27b</div>
                   </div>
                   <Badge tone="free">Qualified</Badge>
                 </div>

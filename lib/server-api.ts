@@ -51,6 +51,19 @@ export interface ModelSummary {
   rating: number;
   latencyMs: number | null;
   available: boolean;
+  canonicalModelId?: string;
+  pricingStatus?: string;
+  customerPricingUsd?: {
+    inputPerMillion: number;
+    outputPerMillion: number;
+    cachedInputPerMillion?: number;
+  };
+  upstreamCostUsd?: {
+    inputPerMillion: number;
+    outputPerMillion: number;
+    cachedInputPerMillion?: number;
+  };
+  benchmarks?: Array<{ name: string; score: number; source?: string; evaluationDate?: string }>;
 }
 
 export interface PlanSummary {

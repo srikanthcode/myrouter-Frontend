@@ -55,7 +55,6 @@ const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-
 export function getGatewayKeyPool(): string[] {
   const envVal = process.env.PROVIDER_PROROUTER_GATEWAY_API_KEY || process.env.PROROUTER_GATEWAY_KEYS || "";
   const fallbackPool = [
-    "tj_wDD1O7w37-Ha7n12b7GhuNgt-kjVCsm7TKysxCwq8_w",
     "tj_llvqgvMUMVg5SKOynVBtBqDJp2J566mapFE9KNPAVqE",
     "tj_mbQStnVQZo7aV70jSdb5T3L1rSs4vmtKvVuPdYMsxCs",
     "tj_XvoBmNCcszDFBbOtvS-D62oDXEEO7OEIqd9rzhfxZX8",
@@ -125,6 +124,12 @@ export async function fetchGatewayWithRetry(
         body: JSON.stringify(body),
         signal,
       });
+
+      if (res.status === 401 || res.status === 403) {
+        if (key) markGatewayCooldown(key, 86_400_000);
+        lastRes = res;
+        continue;
+      }
 
       if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
         if (key) markGatewayCooldown(key, res.status === 429 ? 60_000 : 15_000);
@@ -1130,15 +1135,15 @@ async function streamGateway(
         stream: true,
       };
 
-      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(3500));
+      const { res: upstreamRes } = await fetchGatewayWithRetry(upstreamUrl, upstreamBody, AbortSignal.timeout(45_000));
       if (upstreamRes.ok && upstreamRes.body) {
         const reader = upstreamRes.body.getReader();
 
-        // Guard against stalled GPU inference queues: wait at most 4s for first chunk
+        // Wait up to 45s for first chunk from deep reasoning models
         let firstRead: { done: boolean; value?: Uint8Array };
         try {
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("First chunk timeout")), 4000)
+            setTimeout(() => reject(new Error("First chunk timeout")), 45_000)
           );
           firstRead = await Promise.race([reader.read(), timeoutPromise]);
         } catch (firstErr) {
@@ -1983,7 +1988,7 @@ CRITICAL RULES:
             object: "chat.completion.chunk",
             created: createdTimestamp,
             model: requestedRawModel,
-            choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+            choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
           })}\n\n`;
           controller.enqueue(encoder.encode(initialChunk));
 
@@ -2018,7 +2023,7 @@ CRITICAL RULES:
             model: GATEWAY_MODEL,
             stream: false,
           },
-          AbortSignal.timeout(2500)
+          AbortSignal.timeout(60_000)
         );
         if (upstreamRes.ok) {
           const data = await upstreamRes.json();
@@ -2359,15 +2364,12 @@ CRITICAL RULES:
             },
           })}\n\n`));
 
-          controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
-            type: "content_block_start",
-            index: 0,
-            content_block: { type: "text", text: "" },
-          })}\n\n`));
-
           let outTokens = 0;
-          let blockIndex = 0;
-          let hasToolBlock = false;
+          let hasStartedTextBlock = false;
+          let hasStoppedTextBlock = false;
+          let textBlockIndex = 0;
+          let nextBlockIndex = 0;
+          const toolBlockMap = new Map<number, { blockIndex: number; id: string; name: string }>();
 
           const anthropicController: any = {
             enqueue(chunkBytes: Uint8Array) {
@@ -2384,38 +2386,59 @@ CRITICAL RULES:
                   const finishReason = parsed.choices?.[0]?.finish_reason;
 
                   if (delta?.content) {
+                    if (!hasStartedTextBlock) {
+                      hasStartedTextBlock = true;
+                      textBlockIndex = nextBlockIndex++;
+                      controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
+                        type: "content_block_start",
+                        index: textBlockIndex,
+                        content_block: { type: "text", text: "" },
+                      })}\n\n`));
+                    }
                     outTokens += 1;
                     controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify({
                       type: "content_block_delta",
-                      index: 0,
+                      index: textBlockIndex,
                       delta: { type: "text_delta", text: delta.content },
                     })}\n\n`));
                   }
 
                   if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
+                    if (hasStartedTextBlock && !hasStoppedTextBlock) {
+                      hasStoppedTextBlock = true;
+                      controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
+                        type: "content_block_stop",
+                        index: textBlockIndex,
+                      })}\n\n`));
+                    }
+
                     for (const tc of delta.tool_calls) {
-                      if (!hasToolBlock) {
-                        hasToolBlock = true;
-                        blockIndex++;
-                        controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
-                          type: "content_block_stop",
-                          index: 0,
-                        })}\n\n`));
+                      const tcIdx = typeof tc.index === "number" ? tc.index : 0;
+                      let toolBlock = toolBlockMap.get(tcIdx);
+                      if (!toolBlock) {
+                        const bIdx = nextBlockIndex++;
+                        toolBlock = {
+                          blockIndex: bIdx,
+                          id: tc.id || ("toolu_" + Math.random().toString(36).slice(2, 10)),
+                          name: tc.function?.name || "tool",
+                        };
+                        toolBlockMap.set(tcIdx, toolBlock);
                         controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
                           type: "content_block_start",
-                          index: blockIndex,
+                          index: toolBlock.blockIndex,
                           content_block: {
                             type: "tool_use",
-                            id: tc.id || "toolu_" + Math.random().toString(36).slice(2, 10),
-                            name: tc.function?.name || "tool",
+                            id: toolBlock.id,
+                            name: toolBlock.name,
                             input: {},
                           },
                         })}\n\n`));
                       }
+
                       if (tc.function?.arguments) {
                         controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify({
                           type: "content_block_delta",
-                          index: blockIndex,
+                          index: toolBlock.blockIndex,
                           delta: { type: "input_json_delta", partial_json: tc.function.arguments },
                         })}\n\n`));
                       }
@@ -2423,11 +2446,20 @@ CRITICAL RULES:
                   }
 
                   if (finishReason) {
-                    const stopReason = hasToolBlock ? "tool_use" : "end_turn";
-                    controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
-                      type: "content_block_stop",
-                      index: blockIndex,
-                    })}\n\n`));
+                    if (hasStartedTextBlock && !hasStoppedTextBlock) {
+                      hasStoppedTextBlock = true;
+                      controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
+                        type: "content_block_stop",
+                        index: textBlockIndex,
+                      })}\n\n`));
+                    }
+                    for (const tb of toolBlockMap.values()) {
+                      controller.enqueue(encoder.encode(`event: content_block_stop\ndata: ${JSON.stringify({
+                        type: "content_block_stop",
+                        index: tb.blockIndex,
+                      })}\n\n`));
+                    }
+                    const stopReason = toolBlockMap.size > 0 ? "tool_use" : "end_turn";
                     controller.enqueue(encoder.encode(`event: message_delta\ndata: ${JSON.stringify({
                       type: "message_delta",
                       delta: { stop_reason: stopReason, stop_sequence: null },
@@ -2476,6 +2508,58 @@ CRITICAL RULES:
     }
 
     // ── Anthropic Non-Streaming Response ──
+    if (isGatewayAvailable()) {
+      try {
+        const upstreamUrl = `${GATEWAY_BASE.replace(/\/+$/, "")}/chat/completions`;
+        const { res: upstreamRes } = await fetchGatewayWithRetry(
+          upstreamUrl,
+          {
+            model: GATEWAY_MODEL,
+            messages: convertedMessages,
+            stream: false,
+            tools: convertedTools,
+          },
+          AbortSignal.timeout(60_000)
+        );
+        if (upstreamRes.ok) {
+          const data = await upstreamRes.json();
+          const rawMsg = data.choices?.[0]?.message;
+          if (rawMsg) {
+            const cleaned = cleanNonStreamingMessage(rawMsg, modelDisplayName, ownerName, false);
+            const contentBlocks: any[] = [];
+            if (cleaned.content) {
+              contentBlocks.push({ type: "text", text: cleaned.content });
+            }
+            if (Array.isArray(cleaned.tool_calls) && cleaned.tool_calls.length > 0) {
+              for (const tc of cleaned.tool_calls as any[]) {
+                let parsedInput = {};
+                try {
+                  parsedInput = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
+                } catch { }
+                contentBlocks.push({
+                  type: "tool_use",
+                  id: tc.id || ("toolu_" + Math.random().toString(36).slice(2, 10)),
+                  name: tc.function?.name || "tool",
+                  input: parsedInput,
+                });
+              }
+            }
+            const stopReason = contentBlocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
+            return NextResponse.json({
+              id: msgId,
+              type: "message",
+              role: "assistant",
+              model: requestedRawModel,
+              content: contentBlocks,
+              stop_reason: stopReason,
+              stop_sequence: null,
+              usage: data.usage ? { input_tokens: data.usage.prompt_tokens, output_tokens: data.usage.completion_tokens } : { input_tokens: 30, output_tokens: 60 },
+            }, { headers: CORS_HEADERS });
+          }
+        }
+      } catch { }
+    }
+
     for (let attempt = 0; attempt < 2; attempt++) {
       const key = getNextNabhKey();
       try {
@@ -2493,7 +2577,7 @@ CRITICAL RULES:
             "Authorization": "Bearer " + key,
           },
           body: JSON.stringify(nabhBody),
-          signal: AbortSignal.timeout(60_000),
+          signal: AbortSignal.timeout(30_000),
         });
 
         if (nabhRes.ok) {
@@ -2513,7 +2597,7 @@ CRITICAL RULES:
               } catch { }
               contentBlocks.push({
                 type: "tool_use",
-                id: tc.id || "toolu_" + Math.random().toString(36).slice(2, 10),
+                id: tc.id || ("toolu_" + Math.random().toString(36).slice(2, 10)),
                 name: tc.function?.name || "tool",
                 input: parsedInput,
               });
@@ -2536,20 +2620,12 @@ CRITICAL RULES:
       } catch { }
     }
 
-    // Fallback response
     return NextResponse.json({
-      id: msgId,
-      type: "message",
-      role: "assistant",
-      model: requestedRawModel,
-      content: [
-        { type: "text", text: "I am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>" },
-        { type: "tool_use", id: "toolu_list_files", name: "list_files", input: { path: "." } },
-      ],
-      stop_reason: "tool_use",
-      stop_sequence: null,
-      usage: { input_tokens: 25, output_tokens: 50 },
-    }, { headers: CORS_HEADERS });
+      error: {
+        type: "api_error",
+        message: "Upstream providers temporarily unavailable. Please retry shortly.",
+      },
+    }, { status: 502, headers: CORS_HEADERS });
   }
 
   // ── 4. Fallback for any other path ──

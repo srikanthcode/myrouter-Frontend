@@ -956,9 +956,31 @@ export function cleanAsterisks(text: string): string {
 export class StreamChunkProcessor {
   private inThinkTag = false;
   private accumulatedContent = "";
+  private accumulatedReasoning = "";
   private hasInterceptedDeflection = false;
   private initialBuffer = "";
   private hasCheckedInitialReasoning = false;
+  public hasSeenAnyToolCalls = false;
+  public totalContentLength = 0;
+
+  /** Call this after [DONE] is received; returns a forced list_files tool call if the model only thought but never acted */
+  public getFinalForcedToolCallIfNeeded(): unknown[] | null {
+    if (this.hasSeenAnyToolCalls) return null;
+    if (this.totalContentLength > 20) return null;
+    // Model only produced reasoning with no real content or tool calls — force list_files
+    const hasThinkingPlan = this.accumulatedReasoning.length > 10;
+    if (hasThinkingPlan) {
+      return [
+        {
+          index: 0,
+          id: "call_list_files_forced",
+          type: "function",
+          function: { name: "list_files", arguments: '{"path": "."}' },
+        },
+      ];
+    }
+    return null;
+  }
 
   public processDelta(
     delta: any,
@@ -973,6 +995,7 @@ export class StreamChunkProcessor {
     // Upstream tool_calls preservation (essential for coding agents like Cline/Cursor)
     if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
       outToolCalls = delta.tool_calls;
+      this.hasSeenAnyToolCalls = true;
     }
 
     // Upstream reasoning fields (never emit into content)
@@ -984,6 +1007,7 @@ export class StreamChunkProcessor {
 
     if (upstreamReasoning) {
       outReasoning = (outReasoning || "") + upstreamReasoning;
+      this.accumulatedReasoning += upstreamReasoning;
     }
 
     // Upstream content
@@ -1033,9 +1057,13 @@ export class StreamChunkProcessor {
         if (shouldCleanAsterisks) cleanText = cleanAsterisks(cleanText);
         cleanText = sanitizeModelIdentity(cleanText, modelDisplayName, ownerName);
         this.accumulatedContent += cleanText;
+        this.totalContentLength += cleanText.length;
 
         // Autonomous agent guard: if model deflects or halts at planning without calling tools
+        // Check both accumulated content AND accumulated reasoning for planning/deflection signals
         const lowerAcc = this.accumulatedContent.toLowerCase();
+        const lowerReas = this.accumulatedReasoning.toLowerCase();
+        const checkBoth = lowerAcc + " " + lowerReas;
         const isDeflection =
           lowerAcc.includes("cannot directly access") ||
           lowerAcc.includes("unless you provide it here") ||
@@ -1051,11 +1079,32 @@ export class StreamChunkProcessor {
           lowerAcc.includes("i should:\n1. list files") ||
           lowerAcc.includes("1. list files in the working directory") ||
           lowerAcc.includes("list files in the working directory") ||
-          lowerAcc.includes("explore the working directory to see");
+          lowerAcc.includes("explore the working directory to see") ||
+          lowerAcc.includes("i should explore the working directory") ||
+          lowerAcc.includes("i should first explore") ||
+          lowerAcc.includes("let me explore the working directory") ||
+          lowerAcc.includes("let me first list") ||
+          lowerAcc.includes("let me start by listing") ||
+          lowerAcc.includes("let me start by exploring") ||
+          lowerAcc.includes("let me begin by listing") ||
+          lowerAcc.includes("let me begin by exploring") ||
+          lowerAcc.includes("i'll start by listing") ||
+          lowerAcc.includes("i'll start by exploring") ||
+          lowerAcc.includes("i will start by listing") ||
+          lowerAcc.includes("i will start by exploring") ||
+          lowerAcc.includes("i need to first understand") ||
+          lowerAcc.includes("before modifying anything") ||
+          lowerAcc.includes("i cannot access your") ||
+          lowerAcc.includes("i don't have access to your") ||
+          lowerAcc.includes("i don't have direct access") ||
+          checkBoth.includes("i should:\n1. list files") ||
+          checkBoth.includes("i should:\n1. explore") ||
+          (lowerAcc.includes("i should:") && lowerAcc.includes("list files"));
 
         if (isDeflection) {
           if (!this.hasInterceptedDeflection) {
             this.hasInterceptedDeflection = true;
+            this.hasSeenAnyToolCalls = true;
             outContent = "\n\nI am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>\n";
             if (!outToolCalls) {
               outToolCalls = [
@@ -1084,7 +1133,7 @@ export class StreamChunkProcessor {
           let argsObj: Record<string, unknown> = {};
           try {
             argsObj = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
-          } catch {}
+          } catch { }
           let xmlStr = `\n<${fnName}>\n`;
           for (const [k, v] of Object.entries(argsObj)) {
             xmlStr += `<${k}>${v}</${k}>\n`;
@@ -1148,7 +1197,25 @@ export function cleanNonStreamingMessage(
     lowerContent.includes("i should:\n1. list files") ||
     lowerContent.includes("1. list files in the working directory") ||
     lowerContent.includes("list files in the working directory") ||
-    lowerContent.includes("explore the working directory to see");
+    lowerContent.includes("explore the working directory to see") ||
+    lowerContent.includes("i should explore the working directory") ||
+    lowerContent.includes("i should first explore") ||
+    lowerContent.includes("let me explore the working directory") ||
+    lowerContent.includes("let me first list") ||
+    lowerContent.includes("let me start by listing") ||
+    lowerContent.includes("let me start by exploring") ||
+    lowerContent.includes("let me begin by listing") ||
+    lowerContent.includes("let me begin by exploring") ||
+    lowerContent.includes("i'll start by listing") ||
+    lowerContent.includes("i'll start by exploring") ||
+    lowerContent.includes("i will start by listing") ||
+    lowerContent.includes("i will start by exploring") ||
+    lowerContent.includes("i need to first understand") ||
+    lowerContent.includes("before modifying anything") ||
+    lowerContent.includes("i cannot access your") ||
+    lowerContent.includes("i don't have access to your") ||
+    lowerContent.includes("i don't have direct access") ||
+    (lowerContent.includes("i should:") && lowerContent.includes("list files"));
 
   let toolCalls = Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0 ? msg.tool_calls : undefined;
 
@@ -1171,7 +1238,7 @@ export function cleanNonStreamingMessage(
         let argsObj: Record<string, unknown> = {};
         try {
           argsObj = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
-        } catch {}
+        } catch { }
         let xmlStr = `\n<${fnName}>\n`;
         for (const [k, v] of Object.entries(argsObj)) {
           xmlStr += `<${k}>${v}</${k}>\n`;
@@ -1189,6 +1256,39 @@ export function cleanNonStreamingMessage(
   if (reasoning) result.reasoning_content = reasoning;
   if (toolCalls) result.tool_calls = toolCalls;
   return result;
+}
+
+// ── Helper: emit a forced list_files tool call chunk when model only reasoned but never acted ──
+function emitForcedToolCallIfNeeded(
+  processor: StreamChunkProcessor,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+  reqId: string,
+  createdTimestamp: number,
+  requestedRawModel: string,
+  lastFinishReason: string | null
+): string {
+  const forced = processor.getFinalForcedToolCallIfNeeded();
+  if (forced) {
+    // Emit a text chunk explaining the action
+    controller.enqueue(encoder.encode("data: " + JSON.stringify({
+      id: reqId,
+      object: "chat.completion.chunk",
+      created: createdTimestamp,
+      model: requestedRawModel,
+      choices: [{ index: 0, delta: { content: "\n\nI am inspecting the workspace files to identify and fix all issues.\n\n<list_files>\n<path>.</path>\n</list_files>\n" }, finish_reason: null }],
+    }) + "\n\n"));
+    // Emit tool_calls chunk
+    controller.enqueue(encoder.encode("data: " + JSON.stringify({
+      id: reqId,
+      object: "chat.completion.chunk",
+      created: createdTimestamp,
+      model: requestedRawModel,
+      choices: [{ index: 0, delta: { tool_calls: forced }, finish_reason: null }],
+    }) + "\n\n"));
+    return "tool_calls";
+  }
+  return lastFinishReason || "stop";
 }
 
 // ── Stream helper for Upstream AI Gateway ──
@@ -1242,7 +1342,7 @@ async function streamGateway(
           );
           firstRead = await Promise.race([reader.read(), timeoutPromise]);
         } catch (firstErr) {
-          reader.cancel().catch(() => {});
+          reader.cancel().catch(() => { });
           throw firstErr;
         }
 
@@ -1364,7 +1464,8 @@ async function streamGateway(
           }
         }
         if (!lastFinishReason) {
-          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          lastFinishReason = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (!lastFinishReason || lastFinishReason === "stop") lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
           controller.enqueue(encoder.encode("data: " + JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
@@ -1372,6 +1473,18 @@ async function streamGateway(
             model: requestedRawModel,
             choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
           }) + "\n\n"));
+        } else {
+          // Even if we have a finish_reason, check if model only reasoned but never called tools
+          const finalFr = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (finalFr === "tool_calls" && lastFinishReason !== "tool_calls") {
+            controller.enqueue(encoder.encode("data: " + JSON.stringify({
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+            }) + "\n\n"));
+          }
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -1497,7 +1610,8 @@ async function streamGateway(
           }
         }
         if (!lastFinishReason) {
-          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          lastFinishReason = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (!lastFinishReason || lastFinishReason === "stop") lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
           controller.enqueue(encoder.encode("data: " + JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
@@ -1505,6 +1619,18 @@ async function streamGateway(
             model: requestedRawModel,
             choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
           }) + "\n\n"));
+        } else {
+          // Even if we have a finish_reason, check if model only reasoned but never called tools
+          const finalFr = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (finalFr === "tool_calls" && lastFinishReason !== "tool_calls") {
+            controller.enqueue(encoder.encode("data: " + JSON.stringify({
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+            }) + "\n\n"));
+          }
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -1549,6 +1675,10 @@ async function streamGateway(
             },
           },
         ];
+      }
+      // Force tool calling: Nabh gpt-oss-20b must call a tool, not just describe what it would do
+      if (!nabhBody.tool_choice) {
+        nabhBody.tool_choice = "required";
       }
 
       const res = await fetch("https://api.nabh.cloud/v1/chat/completions", {
@@ -1640,7 +1770,8 @@ async function streamGateway(
           }
         }
         if (!lastFinishReason) {
-          lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          lastFinishReason = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (!lastFinishReason || lastFinishReason === "stop") lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
           controller.enqueue(encoder.encode("data: " + JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
@@ -1648,6 +1779,18 @@ async function streamGateway(
             model: requestedRawModel,
             choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
           }) + "\n\n"));
+        } else {
+          // Even if we have a finish_reason, check if model only reasoned but never called tools
+          const finalFr = emitForcedToolCallIfNeeded(processor, controller, encoder, reqId, createdTimestamp, requestedRawModel, lastFinishReason);
+          if (finalFr === "tool_calls" && lastFinishReason !== "tool_calls") {
+            controller.enqueue(encoder.encode("data: " + JSON.stringify({
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+            }) + "\n\n"));
+          }
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         recordTelemetryRequest({
@@ -2231,6 +2374,10 @@ CRITICAL RULES:
             },
           ];
         }
+        // Force tool calling in non-streaming too
+        if (!nabhBody.tool_choice) {
+          nabhBody.tool_choice = "required";
+        }
 
         const nabhRes = await fetch("https://api.nabh.cloud/v1/chat/completions", {
           method: "POST",
@@ -2529,11 +2676,11 @@ CRITICAL RULES:
                       type: "message_stop",
                     })}\n\n`));
                   }
-                } catch {}
+                } catch { }
               }
             },
             close() {
-              try { controller.close(); } catch {}
+              try { controller.close(); } catch { }
             },
           };
 
@@ -2552,7 +2699,7 @@ CRITICAL RULES:
             clientKey
           );
 
-          try { controller.close(); } catch {}
+          try { controller.close(); } catch { }
         },
       });
 
@@ -2602,7 +2749,7 @@ CRITICAL RULES:
               let parsedInput = {};
               try {
                 parsedInput = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : (tc.function?.arguments || {});
-              } catch {}
+              } catch { }
               contentBlocks.push({
                 type: "tool_use",
                 id: tc.id || "toolu_" + Math.random().toString(36).slice(2, 10),
@@ -2625,7 +2772,7 @@ CRITICAL RULES:
             usage: { input_tokens: 30, output_tokens: 60 },
           }, { headers: CORS_HEADERS });
         }
-      } catch {}
+      } catch { }
     }
 
     // Fallback response

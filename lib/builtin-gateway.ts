@@ -1,18 +1,13 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Buffer } from "node:buffer";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { getAllActivity, getTelemetryOverview } from "@/lib/telemetry-store";
+import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from "./server-api";
 
+const SESSION_COOKIE = "uno_session";
+const SESSION_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
+const DEV_SESSION_SECRET = "prorouter-dev-fallback-session-secret";
 const globalPromoActivations = new Map<string, number>();
-
-
-export function isValidGmail(email: string): boolean {
-  if (!email || typeof email !== "string") return false;
-  const trimmed = email.trim().toLowerCase();
-  if ((process.env.NODE_ENV === "test" || process.env.VITEST) && trimmed.endsWith("@uno.test")) return true;
-  if (trimmed.includes("+")) return false;
-  if (!trimmed.endsWith("@gmail.com")) return false;
-  const username = trimmed.slice(0, trimmed.length - "@gmail.com".length);
-  const gmailRegex = /^[a-z0-9](?!.*\.\.)[a-z0-9.]{4,28}[a-z0-9]$/;
-  return gmailRegex.test(username);
-}
-
 
 interface FallbackTx {
   id: string;
@@ -40,28 +35,217 @@ interface FallbackPendingOrder {
   invoice: string;
   name: string;
   currency: string;
+  createdAt: number;
 }
 
-const globalFallbackWallet = {
-  balancePaise: 0,
-  transactions: [] as FallbackTx[],
-  payments: [] as FallbackPayment[],
-  orders: new Map<string, FallbackPendingOrder>(),
-};
+interface FallbackCheckout {
+  paymentId: string;
+  invoice: string;
+  amountPaise: number;
+  currency: string;
+  gatewayOrderId: string;
+}
 
-import { NextRequest, NextResponse } from "next/server";
-import { Buffer } from "node:buffer";
-import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from "./server-api";
+interface FallbackWallet {
+  balancePaise: number;
+  transactions: FallbackTx[];
+  payments: FallbackPayment[];
+  orders: Map<string, FallbackPendingOrder>;
+  checkouts: Map<string, FallbackCheckout>;
+  redeemedPromos: Set<string>;
+  astraExpiresAt: number | null;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  accountNumber: string;
+}
+
+const fallbackWallets = new Map<string, FallbackWallet>();
+const demoUsers = new Map<string, { passwordHash: string; salt: string; name: string }>();
+
+function walletFor(userId: string): FallbackWallet {
+  let wallet = fallbackWallets.get(userId);
+  if (!wallet) {
+    wallet = {
+      balancePaise: 0,
+      transactions: [],
+      payments: [],
+      orders: new Map(),
+      checkouts: new Map(),
+      redeemedPromos: new Set(),
+      astraExpiresAt: null,
+    };
+    fallbackWallets.set(userId, wallet);
+  }
+  return wallet;
+}
+
+export function isDemoFallbackEnabled(): boolean {
+  const flag = process.env.PROROUTER_ENABLE_DEMO_FALLBACK;
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+function sessionSecret(): string | null {
+  const configured = process.env.SESSION_SECRET || process.env.PROROUTER_SESSION_SECRET;
+  if (configured && configured.length >= 16) return configured;
+  if (process.env.NODE_ENV !== "production") return DEV_SESSION_SECRET;
+  return null;
+}
+
+function adminEmails(): string[] {
+  return (process.env.PROROUTER_ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hashPassword(password: string, salt: string): string {
+  return scryptSync(password, salt, 32).toString("hex");
+}
+
+function verifyPassword(password: string, salt: string, expectedHex: string): boolean {
+  const actual = Buffer.from(hashPassword(password, salt), "hex");
+  const expected = Buffer.from(expectedHex, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function passwordProblem(password: unknown): string | null {
+  if (typeof password !== "string" || password.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return "Password must include at least one letter and one number.";
+  return null;
+}
+
+async function readJson(req: NextRequest): Promise<Record<string, any>> {
+  try {
+    const body = await req.json();
+    return body && typeof body === "object" ? (body as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function sessionUnavailable() {
+  return NextResponse.json(
+    { error: { code: "provider_unavailable", message: "Session signing is not configured. Set SESSION_SECRET (16+ characters) to enable demo authentication." } },
+    { status: 503 },
+  );
+}
+
+function signSession(encoded: string, secret: string): string {
+  return createHmac("sha256", secret).update(encoded).digest("base64url");
+}
+
+function createSessionCookie(user: SessionUser): string | null {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  const payload = {
+    id: user.id,
+    email: user.email.toLowerCase(),
+    name: user.name,
+    accountNumber: user.accountNumber,
+    iat: Date.now(),
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${encoded}.${signSession(encoded, secret)}`;
+}
+
+function parseSessionCookie(req: NextRequest): SessionUser | null {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  const cookie = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!cookie) return null;
+  const parts = cookie.split(".");
+  if (parts.length !== 2) return null;
+  const [encoded, signature] = parts;
+  const expected = signSession(encoded, secret);
+  const providedBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expected);
+  if (providedBuf.length !== expectedBuf.length || !timingSafeEqual(providedBuf, expectedBuf)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (!parsed || typeof parsed.email !== "string") return null;
+    if (typeof parsed.iat !== "number" || Date.now() - parsed.iat > SESSION_MAX_AGE_MS) return null;
+    const email = parsed.email.toLowerCase();
+    if (!isValidGmail(email)) return null;
+    return {
+      id: parsed.id && typeof parsed.id === "string" && parsed.id.startsWith("usr_pr_") ? parsed.id : generateDeterministicUserId(email),
+      email,
+      name: typeof parsed.name === "string" && parsed.name ? parsed.name : email.split("@")[0],
+      role: adminEmails().includes(email) ? "admin" : "user",
+      status: "active",
+      accountNumber: typeof parsed.accountNumber === "string" && parsed.accountNumber ? parsed.accountNumber : generateDeterministicAccountNumber(email),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildUser(email: string, name?: string): SessionUser {
+  return {
+    id: generateDeterministicUserId(email),
+    email,
+    name: name || email.split("@")[0],
+    role: adminEmails().includes(email) ? "admin" : "user",
+    status: "active",
+    accountNumber: generateDeterministicAccountNumber(email),
+  };
+}
+
+function sessionResponse(user: SessionUser, status: number) {
+  const token = createSessionCookie(user);
+  if (!token) return sessionUnavailable();
+  const res = NextResponse.json({ user }, { status });
+  res.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 30 * 24 * 3600,
+  });
+  return res;
+}
+
+function requireSession(req: NextRequest): { user: SessionUser } | { response: NextResponse } {
+  const user = parseSessionCookie(req);
+  if (!user) {
+    return {
+      response: NextResponse.json({ error: { code: "unauthenticated", message: "Sign in to continue." } }, { status: 401 }),
+    };
+  }
+  return { user };
+}
+
+function astraState(wallet: FallbackWallet) {
+  const expiresAt = wallet.astraExpiresAt;
+  const active = Boolean(expiresAt && expiresAt > Date.now());
+  return {
+    active,
+    expiresAt: active && expiresAt ? new Date(expiresAt).toISOString() : null,
+    daysLeft: active && expiresAt ? Math.ceil((expiresAt - Date.now()) / 86400000) : 0,
+  };
+}
+
+export function isValidGmail(email: string): boolean {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim().toLowerCase();
+  if ((process.env.NODE_ENV === "test" || process.env.VITEST) && trimmed.endsWith("@uno.test")) return true;
+  if (trimmed.includes("+")) return false;
+  if (!trimmed.endsWith("@gmail.com")) return false;
+  const username = trimmed.slice(0, trimmed.length - "@gmail.com".length);
+  const gmailRegex = /^[a-z0-9](?!.*\.\.)[a-z0-9.]{4,28}[a-z0-9]$/;
+  return gmailRegex.test(username);
+}
 
 export function generateDeterministicUserId(identifier: string): string {
   const clean = (identifier || "").trim().toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < clean.length; i++) {
-    hash = (hash << 5) - hash + clean.charCodeAt(i);
-    hash |= 0;
-  }
-  const hex = Math.abs(hash).toString(16).padStart(8, "0");
-  return `usr_pr_${hex}`;
+  return `usr_pr_${createHash("sha256").update(clean).digest("hex").slice(0, 16)}`;
 }
 
 export function generateDeterministicAccountNumber(identifier: string): string {
@@ -78,262 +262,184 @@ export function generateDeterministicAccountNumber(identifier: string): string {
   return `PR-ACC-${part1}-${part2}`;
 }
 
-import { getTelemetryOverview, getAllActivity } from "@/lib/telemetry-store";
-
-export interface SessionUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  status: string;
-  accountNumber: string;
-}
-
-function parseSessionCookie(req: NextRequest): SessionUser | null {
-  const cookie = req.cookies.get("uno_session")?.value;
-  if (!cookie) return null;
-  try {
-    const raw = Buffer.from(cookie, "base64url").toString("utf8");
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.email === "string") {
-      const email = parsed.email.toLowerCase();
-      const id = parsed.id && parsed.id.startsWith("usr_pr_") ? parsed.id : generateDeterministicUserId(email);
-      const accountNumber = parsed.accountNumber || generateDeterministicAccountNumber(email);
-      return {
-        id,
-        email,
-        name: parsed.name || email.split("@")[0],
-        role: parsed.role || "user",
-        status: "active",
-        accountNumber,
-      };
-    }
-  } catch {
-    /* ignore invalid session */
-  }
-  return null;
-}
-
-function createSessionCookie(user: { id?: string; email: string; name?: string; role?: string; accountNumber?: string }): string {
-  const email = user.email.toLowerCase();
-  const id = user.id && user.id.startsWith("usr_pr_") ? user.id : generateDeterministicUserId(email);
-  const accountNumber = user.accountNumber || generateDeterministicAccountNumber(email);
-  const payload = {
-    id,
-    email,
-    name: user.name || email.split("@")[0],
-    role: user.role || "user",
-    accountNumber,
-    iat: Date.now(),
-  };
-  return Buffer.from(JSON.stringify(payload)).toString("base64url");
-}
-
 export async function handleFallback(req: NextRequest, path: string[]) {
+  if (!isDemoFallbackEnabled()) {
+    return NextResponse.json(
+      { error: { code: "provider_unavailable", message: "The built-in demo gateway is disabled. Configure API_BASE_URL to reach the ProRouter backend." } },
+      { status: 503 },
+    );
+  }
+
   const subpath = "/" + path.join("/");
   const method = req.method;
 
   // ── Auth: Register ──
   if (subpath === "/auth/register" && method === "POST") {
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-    const email = (body.email || "").trim().toLowerCase();
-    const name = (body.name || "").trim() || email.split("@")[0] || "User";
+    if (!sessionSecret()) return sessionUnavailable();
+    const body = await readJson(req);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!isValidGmail(email)) {
       return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
-    const user = {
-      id: generateDeterministicUserId(email),
-      email,
-      name,
-      role: "user",
-      status: "active",
-      accountNumber: generateDeterministicAccountNumber(email),
-    };
-    const token = createSessionCookie(user);
-    const res = NextResponse.json({ user }, { status: 201 });
-    res.cookies.set("uno_session", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 30 * 24 * 3600,
-    });
-    return res;
+    const problem = passwordProblem(body.password);
+    if (problem) {
+      return NextResponse.json({ error: { code: "invalid_request", message: problem } }, { status: 400 });
+    }
+    if (demoUsers.has(email)) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "An account with this Gmail already exists. Please sign in instead." } }, { status: 409 });
+    }
+    const salt = randomBytes(16).toString("hex");
+    demoUsers.set(email, { passwordHash: hashPassword(body.password, salt), salt, name: name || email.split("@")[0] });
+    return sessionResponse(buildUser(email, name), 201);
   }
 
   // ── Auth: Login ──
   if (subpath === "/auth/login" && method === "POST") {
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-    const email = (body.email || "").trim().toLowerCase();
+    if (!sessionSecret()) return sessionUnavailable();
+    const body = await readJson(req);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!isValidGmail(email)) {
       return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
-    const user = {
-      id: generateDeterministicUserId(email),
-      email,
-      name: email.split("@")[0],
-      role: "user",
-      status: "active",
-      accountNumber: generateDeterministicAccountNumber(email),
-    };
-    const token = createSessionCookie(user);
-    const res = NextResponse.json({ user }, { status: 200 });
-    res.cookies.set("uno_session", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 30 * 24 * 3600,
-    });
-    return res;
+    const record = demoUsers.get(email);
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!record || !verifyPassword(password, record.salt, record.passwordHash)) {
+      return NextResponse.json({ error: { code: "unauthenticated", message: "Incorrect Gmail or password." } }, { status: 401 });
+    }
+    return sessionResponse(buildUser(email, record.name), 200);
   }
 
   // ── Auth: Logout ──
   if (subpath === "/auth/logout" && method === "POST") {
     const res = NextResponse.json({ ok: true });
-    res.cookies.delete("uno_session");
+    res.cookies.delete(SESSION_COOKIE);
     return res;
   }
 
   // ── Auth: Me ──
   if (subpath === "/auth/me" && method === "GET") {
-    const user = parseSessionCookie(req);
-    if (!user) {
-      return NextResponse.json({ user: null }, { status: 401 });
-    }
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const wallet = walletFor(auth.user.id);
     return NextResponse.json({
-      user,
-      balancePaise: 25000,
+      user: auth.user,
+      balancePaise: wallet.balancePaise,
       plan: { slug: "free", name: "Free Tier", pricePaise: 0, freeRpm: 20, queuePriority: 1 },
-      astra: { active: false, expiresAt: null, daysLeft: 0 },
+      astra: astraState(wallet),
     });
   }
 
   // ── Auth: Profile Update ──
   if (subpath === "/auth/profile" && method === "PATCH") {
-    return NextResponse.json({ ok: true });
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const body = await readJson(req);
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Please provide a display name." } }, { status: 400 });
+    }
+    const record = demoUsers.get(auth.user.email);
+    if (record) record.name = name;
+    return sessionResponse({ ...auth.user, name }, 200);
   }
 
   // ── Auth: Password Change ──
   if (subpath === "/auth/password" && method === "POST") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const body = await readJson(req);
+    const record = demoUsers.get(auth.user.email);
+    if (!record) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Password changes are only available for demo accounts created in this session." } }, { status: 400 });
+    }
+    const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+    if (!verifyPassword(currentPassword, record.salt, record.passwordHash)) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Current password is incorrect." } }, { status: 400 });
+    }
+    const problem = passwordProblem(body.newPassword);
+    if (problem) {
+      return NextResponse.json({ error: { code: "invalid_request", message: problem } }, { status: 400 });
+    }
+    const salt = randomBytes(16).toString("hex");
+    record.salt = salt;
+    record.passwordHash = hashPassword(body.newPassword, salt);
     return NextResponse.json({ ok: true });
   }
 
   // ── Keys ──
-  if (subpath.startsWith("/keys")) {
-    if (method === "GET") {
-      return NextResponse.json({
-        items: [
-          {
-            id: "key_live_default_user",
-            name: "Default Key",
-            prefix: "pr_live_",
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-            expiresAt: null,
-            revokedAt: null,
-            lastUsedAt: new Date().toISOString(),
-            requestCount: 0,
-            spendPaise: 0,
-            spendingLimitPaise: null,
-            allowedModels: null,
-          },
-        ],
-      });
-    }
-    if (method === "POST") {
-      let body: any = {};
-      try { body = await req.json(); } catch { body = {}; }
-      const secret = "pr_live_sk_" + Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
-      return NextResponse.json({
-        key: {
-          id: "key_live_" + Math.random().toString(36).slice(2, 8),
-          name: body.name || "API Key",
-          prefix: "pr_live_",
-          createdAt: new Date().toISOString(),
-          expiresAt: body.expiresAt || null,
-          revokedAt: null,
-          lastUsedAt: null,
-          requestCount: 0,
-          spendPaise: 0,
-          spendingLimitPaise: body.spendingLimitPaise || null,
-          allowedModels: body.allowedModels || null,
-        },
-        secret,
-      }, { status: 201 });
-    }
-    if (method === "DELETE") {
-      return NextResponse.json({ ok: true });
-    }
+  if (subpath === "/keys" || subpath.startsWith("/keys/")) {
+    return NextResponse.json(
+      { error: { code: "provider_unavailable", message: "API keys are issued by the ProRouter backend and are not available in the built-in demo gateway." } },
+      { status: 503 },
+    );
   }
 
   // ── Dashboard Overview & Stats ──
-  if (subpath === "/dashboard/overview") {
-    const url = new URL(req.url);
-    const timeFilter = url.searchParams.get("time") || "This month";
-    const modelFilter = url.searchParams.get("model") || "By Model";
-    const stats = getTelemetryOverview(timeFilter, modelFilter);
+  if (subpath.startsWith("/dashboard") || subpath === "/usage" || subpath.startsWith("/usage/")) {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
 
-    return NextResponse.json({
-      ...stats,
-      activeKeys: 1,
-      freeUsed: 0,
-      plan: {
-        slug: "free",
-        name: "Free Tier",
-        freeRpm: 20,
-        queuePriority: 1,
-      },
-      queue: [],
-    });
-  }
+    if (subpath === "/dashboard/overview") {
+      const url = new URL(req.url);
+      const timeFilter = url.searchParams.get("time") || "This month";
+      const modelFilter = url.searchParams.get("model") || "By Model";
+      const stats = getTelemetryOverview(timeFilter, modelFilter);
 
-  if (subpath.startsWith("/dashboard/activity")) {
-    // If specific item requested: /dashboard/activity/:id
-    if (subpath.length > "/dashboard/activity/".length && !subpath.includes("?")) {
-      const id = subpath.slice("/dashboard/activity/".length);
-      const all = getAllActivity(100, 0);
-      const found = all.items.find((item) => item.id === id) || all.items[0];
       return NextResponse.json({
-        request: found,
-        attempts: [],
-        timeline: [],
+        ...stats,
+        activeKeys: 0,
+        freeUsed: 0,
+        plan: {
+          slug: "free",
+          name: "Free Tier",
+          freeRpm: 20,
+          queuePriority: 1,
+        },
+        queue: [],
       });
     }
 
-    const all = getAllActivity(50, 0);
-    return NextResponse.json(all);
-  }
+    if (subpath.startsWith("/dashboard/activity")) {
+      if (subpath.length > "/dashboard/activity/".length && !subpath.includes("?")) {
+        const id = subpath.slice("/dashboard/activity/".length);
+        const all = getAllActivity(100, 0);
+        const found = all.items.find((item) => item.id === id) || all.items[0];
+        return NextResponse.json({
+          request: found,
+          attempts: [],
+          timeline: [],
+        });
+      }
 
-  if (subpath.startsWith("/dashboard/series")) {
-    const overview = getTelemetryOverview();
-    return NextResponse.json({ items: overview.dailySeries });
-  }
+      const all = getAllActivity(50, 0);
+      return NextResponse.json(all);
+    }
 
-  if (subpath.startsWith("/dashboard/usage") || subpath.startsWith("/usage")) {
-    const overview = getTelemetryOverview();
-    return NextResponse.json({
-      byModel: overview.models.map((m) => ({ model: m.id, n: m.requests, tokens: m.tokens, cost: m.spend })),
-      byProvider: [],
-    });
+    if (subpath.startsWith("/dashboard/series")) {
+      const overview = getTelemetryOverview();
+      return NextResponse.json({ items: overview.dailySeries });
+    }
+
+    if (subpath.startsWith("/dashboard/usage") || subpath === "/usage" || subpath.startsWith("/usage/")) {
+      const overview = getTelemetryOverview();
+      return NextResponse.json({
+        byModel: overview.models.map((m) => ({ model: m.id, n: m.requests, tokens: m.tokens, cost: m.spend })),
+        byProvider: [],
+      });
+    }
   }
 
   // ── Wallet ──
-  if (subpath === "/wallet") {
+  if (subpath === "/wallet" && method === "GET") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const wallet = walletFor(auth.user.id);
     return NextResponse.json({
-      balancePaise: globalFallbackWallet.balancePaise,
-      balanceFormatted: `₹${(globalFallbackWallet.balancePaise / 100).toFixed(2)}`,
+      balancePaise: wallet.balancePaise,
+      balanceFormatted: `₹${(wallet.balancePaise / 100).toFixed(2)}`,
       currency: "INR",
-      transactions: globalFallbackWallet.transactions,
+      transactions: wallet.transactions,
     });
   }
 
@@ -442,12 +548,17 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/wallet/checkout" && method === "POST") {
-    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_TvHLS3Dlt6qygS";
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "bHdafnoL9Gu2nx3zsjGiZ3z7";
-    let body: Record<string, any> = {};
-    try {
-      body = (await req.json()) || {};
-    } catch { }
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+    if (!keyId || !keySecret) {
+      return NextResponse.json(
+        { error: { code: "provider_unavailable", message: "Razorpay is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." } },
+        { status: 503 },
+      );
+    }
 
     interface GatewayPackage {
       priceMinor: number;
@@ -457,17 +568,14 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     }
 
     const packageMap: Record<string, GatewayPackage> = {
-      // INR Packages
       "starter-100": { priceMinor: 10000, name: "₹100 Starter Pack", bonusPaise: 0, currency: "INR" },
       "pro-500": { priceMinor: 50000, name: "₹500 Pro Pack", bonusPaise: 5000, currency: "INR" },
       "scale-1000": { priceMinor: 100000, name: "₹1,000 Scale Pack", bonusPaise: 20000, currency: "INR" },
       "power-2500": { priceMinor: 250000, name: "₹2,500 Power Pack", bonusPaise: 65000, currency: "INR" },
-      "starter": { priceMinor: 49900, name: "Starter", bonusPaise: 0, currency: "INR" },
-      "builder": { priceMinor: 99900, name: "Builder", bonusPaise: 5100, currency: "INR" },
-      "pro": { priceMinor: 249900, name: "Pro", bonusPaise: 25100, currency: "INR" },
-      "power": { priceMinor: 499900, name: "Power", bonusPaise: 75100, currency: "INR" },
-
-      // USD Packages
+      starter: { priceMinor: 49900, name: "Starter", bonusPaise: 0, currency: "INR" },
+      builder: { priceMinor: 99900, name: "Builder", bonusPaise: 5100, currency: "INR" },
+      pro: { priceMinor: 249900, name: "Pro", bonusPaise: 25100, currency: "INR" },
+      power: { priceMinor: 499900, name: "Power", bonusPaise: 75100, currency: "INR" },
       "starter-usd-5": { priceMinor: 500, name: "$5 Starter Pack", bonusPaise: 0, currency: "USD" },
       "pro-usd-10": { priceMinor: 1000, name: "$10 Pro Pack", bonusPaise: 150, currency: "USD" },
       "scale-usd-25": { priceMinor: 2500, name: "$25 Scale Pack", bonusPaise: 500, currency: "USD" },
@@ -476,133 +584,179 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       "pro-usd": { priceMinor: 2900, name: "Pro Plan", bonusPaise: 300, currency: "USD" },
     };
 
-    const isUSD = (typeof body.currency === "string" && body.currency.toUpperCase() === "USD") || (typeof body.packageSlug === "string" && body.packageSlug.includes("usd"));
-    const defaultCurrency: "INR" | "USD" = isUSD ? "USD" : "INR";
-    const defaultMinor = isUSD ? 500 : 10000;
-    const pkg: GatewayPackage = packageMap[body.packageSlug] || {
-      priceMinor: defaultMinor,
-      name: isUSD ? "$5.00 Credits" : "₹100 Credits",
-      bonusPaise: 0,
-      currency: defaultCurrency,
-    };
-    const invoice = "PRO-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-    const paymentId = "pay_" + Math.random().toString(36).slice(2, 14);
+    const body = await readJson(req);
+    const packageSlug = typeof body.packageSlug === "string" ? body.packageSlug : "";
+    const pkg = packageMap[packageSlug];
+    if (!pkg) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Unknown wallet package." } }, { status: 400 });
+    }
+
+    const wallet = walletFor(auth.user.id);
+    const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+    if (idempotencyKey) {
+      const prior = wallet.checkouts.get(idempotencyKey);
+      if (prior) {
+        return NextResponse.json({ ...prior, gateway: "razorpay", keyId });
+      }
+    }
+
+    const invoice = "PRO-" + Date.now().toString(36).toUpperCase() + "-" + randomBytes(3).toString("hex").toUpperCase();
+    const paymentId = "pay_" + randomBytes(8).toString("hex");
+    const authHeader = Buffer.from(keyId + ":" + keySecret).toString("base64");
 
     let gatewayOrderId = "";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     try {
-      const auth = Buffer.from(keyId + ":" + keySecret).toString("base64");
       const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
         method: "POST",
         headers: {
-          authorization: "Basic " + auth,
+          authorization: "Basic " + authHeader,
           "content-type": "application/json",
         },
         body: JSON.stringify({
           amount: pkg.priceMinor,
           currency: pkg.currency,
           receipt: invoice,
-          notes: { payment_id: paymentId, package: body.packageSlug, currency: pkg.currency },
+          notes: { payment_id: paymentId, package: packageSlug, currency: pkg.currency },
         }),
+        signal: controller.signal,
       });
       if (rzpRes.ok) {
-        const orderData = (await rzpRes.json()) as { id: string };
-        gatewayOrderId = orderData.id;
+        const orderData = (await rzpRes.json()) as { id?: unknown };
+        if (typeof orderData.id === "string" && orderData.id) gatewayOrderId = orderData.id;
       }
-    } catch (e) {
-      console.error("Razorpay order creation fallback error:", e);
+    } catch (error) {
+      console.error("Razorpay order creation failed:", error);
+    } finally {
+      clearTimeout(timer);
     }
 
     if (!gatewayOrderId) {
-      gatewayOrderId = "order_" + Math.random().toString(36).slice(2, 16);
+      return NextResponse.json({ error: { code: "provider_error", message: "Could not create a Razorpay order. Please try again." } }, { status: 502 });
     }
 
-    globalFallbackWallet.orders.set(gatewayOrderId, {
+    wallet.orders.set(gatewayOrderId, {
       amountPaise: pkg.priceMinor,
-      totalPaise: pkg.priceMinor + (pkg.bonusPaise || 0),
+      totalPaise: pkg.priceMinor + pkg.bonusPaise,
       invoice,
       name: pkg.name,
       currency: pkg.currency,
+      createdAt: Date.now(),
     });
+    while (wallet.orders.size > 20) {
+      const oldest = wallet.orders.keys().next().value;
+      if (oldest === undefined) break;
+      wallet.orders.delete(oldest);
+    }
 
-    return NextResponse.json({
+    const checkout: FallbackCheckout = {
       paymentId,
       invoice,
       amountPaise: pkg.priceMinor,
       currency: pkg.currency,
-      gateway: "razorpay",
       gatewayOrderId,
-      keyId,
-    });
-  }
-
-  if (subpath === "/wallet/verify" && method === "POST") {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "bHdafnoL9Gu2nx3zsjGiZ3z7";
-    let body: Record<string, any> = {};
-    try {
-      body = (await req.json()) || {};
-    } catch { }
-
-    const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = body;
-    if (razorpayPaymentId && razorpayOrderId && razorpaySignature) {
-      const { createHmac } = await import("crypto");
-      const expected = createHmac("sha256", keySecret)
-        .update(String(razorpayOrderId) + "|" + String(razorpayPaymentId))
-        .digest("hex");
-
-      if (expected !== razorpaySignature) {
-        return NextResponse.json({ error: { message: "Invalid payment signature" } }, { status: 403 });
+    };
+    if (idempotencyKey) {
+      wallet.checkouts.set(idempotencyKey, checkout);
+      while (wallet.checkouts.size > 50) {
+        const oldest = wallet.checkouts.keys().next().value;
+        if (oldest === undefined) break;
+        wallet.checkouts.delete(oldest);
       }
     }
 
-    const order = razorpayOrderId ? globalFallbackWallet.orders.get(razorpayOrderId) : undefined;
-    const addedPaise = order ? order.totalPaise : 50000;
-    const paidPaise = order ? order.amountPaise : 50000;
-    const invoiceNum = order ? order.invoice : ("PRO-" + Date.now().toString(36).toUpperCase());
-    const paymentId = razorpayPaymentId || body.paymentId || ("pay_" + Date.now());
+    return NextResponse.json({ ...checkout, gateway: "razorpay", keyId });
+  }
 
-    globalFallbackWallet.balancePaise += addedPaise;
+  if (subpath === "/wallet/verify" && method === "POST") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
 
-    if (!globalFallbackWallet.transactions.some((t) => t.id === "tx_" + paymentId)) {
-      globalFallbackWallet.transactions.unshift({
-        id: "tx_" + paymentId,
-        type: "topup",
-        amountPaise: addedPaise,
-        amountFormatted: "+₹" + (addedPaise / 100).toFixed(2),
-        balanceAfterPaise: globalFallbackWallet.balancePaise,
-        reference: invoiceNum,
-        createdAt: new Date().toISOString(),
-      });
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+    if (!keySecret) {
+      return NextResponse.json(
+        { error: { code: "provider_unavailable", message: "Razorpay is not configured. Set RAZORPAY_KEY_SECRET." } },
+        { status: 503 },
+      );
     }
 
-    if (!globalFallbackWallet.payments.some((p) => p.id === paymentId || p.invoice === invoiceNum)) {
-      globalFallbackWallet.payments.unshift({
-        id: paymentId,
-        invoice: invoiceNum,
-        amountPaise: paidPaise,
-        amountFormatted: "₹" + (paidPaise / 100).toFixed(2),
-        gateway: "razorpay",
+    const body = await readJson(req);
+    const razorpayPaymentId = typeof body.razorpayPaymentId === "string" ? body.razorpayPaymentId : "";
+    const razorpayOrderId = typeof body.razorpayOrderId === "string" ? body.razorpayOrderId : "";
+    const razorpaySignature = typeof body.razorpaySignature === "string" ? body.razorpaySignature : "";
+    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Razorpay payment id, order id and signature are required." } }, { status: 400 });
+    }
+
+    const wallet = walletFor(auth.user.id);
+    const existing = wallet.transactions.find((tx) => tx.id === "tx_" + razorpayPaymentId);
+    if (existing) {
+      return NextResponse.json({
+        success: true,
         status: "captured",
-        createdAt: new Date().toISOString(),
+        paymentId: typeof body.paymentId === "string" && body.paymentId ? body.paymentId : razorpayPaymentId,
+        gatewayPaymentId: razorpayPaymentId,
+        credited: false,
+        deduped: true,
       });
     }
+
+    const order = wallet.orders.get(razorpayOrderId);
+    if (!order || Date.now() - order.createdAt > 60 * 60 * 1000) {
+      wallet.orders.delete(razorpayOrderId);
+      return NextResponse.json({ error: { code: "invalid_request", message: "Unknown or expired payment order for this account." } }, { status: 400 });
+    }
+
+    const expected = createHmac("sha256", keySecret).update(razorpayOrderId + "|" + razorpayPaymentId).digest("hex");
+    const providedBuf = Buffer.from(razorpaySignature);
+    const expectedBuf = Buffer.from(expected);
+    if (providedBuf.length !== expectedBuf.length || !timingSafeEqual(providedBuf, expectedBuf)) {
+      return NextResponse.json({ error: { code: "forbidden", message: "Invalid payment signature." } }, { status: 403 });
+    }
+
+    wallet.balancePaise += order.totalPaise;
+    wallet.transactions.unshift({
+      id: "tx_" + razorpayPaymentId,
+      type: "topup",
+      amountPaise: order.totalPaise,
+      amountFormatted: "+₹" + (order.totalPaise / 100).toFixed(2),
+      balanceAfterPaise: wallet.balancePaise,
+      reference: order.invoice,
+      createdAt: new Date().toISOString(),
+    });
+    wallet.payments.unshift({
+      id: razorpayPaymentId,
+      invoice: order.invoice,
+      amountPaise: order.amountPaise,
+      amountFormatted: "₹" + (order.amountPaise / 100).toFixed(2),
+      gateway: "razorpay",
+      status: "captured",
+      createdAt: new Date().toISOString(),
+    });
+    wallet.orders.delete(razorpayOrderId);
 
     return NextResponse.json({
       success: true,
       status: "captured",
-      paymentId: body.paymentId || paymentId,
+      paymentId: typeof body.paymentId === "string" && body.paymentId ? body.paymentId : razorpayPaymentId,
       gatewayPaymentId: razorpayPaymentId,
       credited: true,
     });
   }
 
   if (subpath === "/payments") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
     return NextResponse.json({
-      items: globalFallbackWallet.payments,
+      items: walletFor(auth.user.id).payments,
     });
   }
 
   // ── Notifications ──
   if (subpath === "/notifications") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
     return NextResponse.json({
       items: [
         {
@@ -617,11 +771,16 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/notifications/read" && method === "POST") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
     return NextResponse.json({ ok: true });
   }
 
   // ── Promotions / Astra ──
   if (subpath === "/promotions/astra") {
+    const user = parseSessionCookie(req);
+    const wallet = user ? walletFor(user.id) : null;
+    const astra = wallet ? astraState(wallet) : { active: false, expiresAt: null, daysLeft: 0 };
     return NextResponse.json({
       available: true,
       campaign: {
@@ -635,16 +794,14 @@ export async function handleFallback(req: NextRequest, path: string[]) {
         endsAt: new Date(Date.now() + 30 * 86400000).toISOString(),
         active: true,
       },
-      entitlement: {
-        activatedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(),
-        daysLeft: 30,
-      },
-      myCode: "ASTRA-PRO",
+      entitlement: astra.active ? { activatedAt: new Date().toISOString(), expiresAt: astra.expiresAt, daysLeft: astra.daysLeft } : null,
+      myCode: user ? "ASTRA-PRO" : null,
     });
   }
 
   if (subpath === "/promotions/astra/referral") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
     return NextResponse.json({
       code: "ASTRA-PRO",
       sharePath: "/signup?ref=ASTRA-PRO",
@@ -655,7 +812,41 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   if (subpath === "/promotions/astra/redeem" && method === "POST") {
-    return NextResponse.json({ ok: true, addedPaise: 5000 });
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const body = await readJson(req);
+    const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+    if (!code) {
+      return NextResponse.json({ error: { code: "invalid_request", message: "Please enter a referral or gift code." } }, { status: 400 });
+    }
+    if (!/^ASTRA-PRO$/.test(code) && !/^PRO-[A-Z0-9]{6}$/.test(code)) {
+      return NextResponse.json({ error: { code: "invalid_code", message: "This code is not valid." } }, { status: 400 });
+    }
+    const wallet = walletFor(auth.user.id);
+    if (wallet.redeemedPromos.has(code)) {
+      return NextResponse.json({ error: { code: "already_redeemed", message: "This code has already been redeemed." } }, { status: 400 });
+    }
+    wallet.redeemedPromos.add(code);
+    wallet.balancePaise += 5000;
+    wallet.astraExpiresAt = Date.now() + 30 * 86400000;
+    wallet.transactions.unshift({
+      id: "tx_promo_" + code + "_" + Date.now(),
+      type: "promo",
+      amountPaise: 5000,
+      amountFormatted: "+₹50.00",
+      balanceAfterPaise: wallet.balancePaise,
+      reference: code,
+      createdAt: new Date().toISOString(),
+    });
+    return NextResponse.json({
+      success: true,
+      entitlement: {
+        activatedAt: new Date().toISOString(),
+        expiresAt: new Date(wallet.astraExpiresAt).toISOString(),
+        daysLeft: 30,
+      },
+      message: "Astra access activated.",
+    });
   }
   // ── 48-Hour Promotional Launch Special (§Phase 4) ──
   if (subpath === "/promotions/launch-48h") {
@@ -711,7 +902,6 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     });
   }
 
-
   // ── Models & Providers Catalog ──
   if (subpath === "/models") {
     return NextResponse.json({
@@ -725,75 +915,6 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       providers: DEFAULT_PROVIDERS,
       total: DEFAULT_PROVIDERS.length,
     });
-  }
-
-  // ── Keys Management Fallback ──
-  if (subpath === "/keys" && method === "GET") {
-    return NextResponse.json({
-      items: [
-        {
-          id: "key_live_default_user",
-          name: "Default Live Key",
-          prefix: "pro_sk_live_play",
-          createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-          expiresAt: null,
-          revokedAt: null,
-          lastUsedAt: new Date().toISOString(),
-          requestCount: 42,
-          spendPaise: 0,
-          spendingLimitPaise: null,
-          allowedModels: null,
-        },
-      ],
-    });
-  }
-
-  if (subpath === "/keys" && method === "POST") {
-    let body: Record<string, any> = {};
-    try { body = await req.json(); } catch { }
-    const keyName = body.name || "Production Key";
-    const randPart = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
-    const secret = "pro_sk_live_" + randPart;
-    const prefix = secret.slice(0, 16);
-    const key = {
-      id: "key_" + Math.random().toString(36).slice(2, 10),
-      name: keyName,
-      prefix,
-      createdAt: new Date().toISOString(),
-      expiresAt: null,
-      revokedAt: null,
-      lastUsedAt: null,
-      requestCount: 0,
-      spendPaise: 0,
-      spendingLimitPaise: body.spendingLimitPaise || null,
-      allowedModels: body.allowedModels || null,
-    };
-    return NextResponse.json({ key, secret }, { status: 201 });
-  }
-
-  if (subpath.startsWith("/keys/") && subpath.endsWith("/rotate") && method === "POST") {
-    const keyId = subpath.slice("/keys/".length, -"/rotate".length);
-    const randPart = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14);
-    const secret = "pro_sk_live_" + randPart;
-    const prefix = secret.slice(0, 16);
-    const key = {
-      id: keyId,
-      name: "Rotated Key",
-      prefix,
-      createdAt: new Date().toISOString(),
-      expiresAt: null,
-      revokedAt: null,
-      lastUsedAt: new Date().toISOString(),
-      requestCount: 0,
-      spendPaise: 0,
-      spendingLimitPaise: null,
-      allowedModels: null,
-    };
-    return NextResponse.json({ key, secret });
-  }
-
-  if (subpath.startsWith("/keys/") && method === "DELETE") {
-    return NextResponse.json({ ok: true });
   }
 
   return NextResponse.json({ error: { code: "not_found", message: `Route ${method} ${subpath} not found.` } }, { status: 404 });

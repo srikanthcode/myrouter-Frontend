@@ -1865,10 +1865,13 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 
 export function isDemoGatewayEnabled(): boolean {
+  // Production must always authenticate; anonymous demo traffic would spend
+  // server-held provider keys without any wallet or billing attribution.
+  if (process.env.NODE_ENV === "production") return false;
   const raw = (process.env.PROROUTER_ENABLE_DEMO_GATEWAY || "").trim().toLowerCase();
   if (raw === "true" || raw === "1" || raw === "yes") return true;
   if (raw === "false" || raw === "0" || raw === "no") return false;
-  return process.env.NODE_ENV !== "production";
+  return true;
 }
 
 export function getCallerCredential(req: NextRequest): {
@@ -2391,7 +2394,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
   if (isInferenceRequest) {
     const credential = getCallerCredential(req);
     const demoEnabled = isDemoGatewayEnabled();
-    const useBackend = Boolean(credential.apiKey) || (credential.hasSession && !demoEnabled);
+    const useBackend = Boolean(credential.apiKey) || credential.hasSession;
 
     if (useBackend) {
       if (!BACKEND_BASE) {

@@ -27,8 +27,8 @@ export const DEFAULT_MIN_SELLING_PRICE_USD = 0.05;
 export const DEFAULT_MAX_APPROVED_MARGIN = 0.85;
 
 export const DEFAULT_USD_TO_INR_MARKET_RATE = 88.0;
-export const DEFAULT_USD_TO_INR_DISPLAY_RATE = 80.0;
-export const DEFAULT_USD_TO_INR_RATE = 80.0;
+export const DEFAULT_USD_TO_INR_DISPLAY_RATE = 97.0;
+export const DEFAULT_USD_TO_INR_RATE = DEFAULT_USD_TO_INR_DISPLAY_RATE;
 
 export interface TokenPriceCalculation {
   upstreamCostUsdPer1M: number;

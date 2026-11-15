@@ -845,6 +845,17 @@ export const ALL_MODELS: ModelEntry[] = [
     pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
   },
   {
+    id: "gpt-4.1",
+    name: "GPT-4.1",
+    object: "model",
+    created: 1710000000,
+    owned_by: "openai",
+    category: "Coding and Flagship",
+    tier: "Frontier",
+    description: "OpenAI GPT-4.1 flagship coding agent model with state-of-the-art native tool calling and reasoning.",
+    pricing: { input_usd_per_million: 2.50, output_usd_per_million: 10.00 },
+  },
+  {
     id: "gpt-4o",
     name: "GPT-4o",
     object: "model",
@@ -1313,7 +1324,7 @@ async function streamGateway(
                   choices: [],
                   usage: parsed.usage,
                 }) + "\n\n"));
-              }              const delta = parsed.choices?.[0]?.delta;
+              } const delta = parsed.choices?.[0]?.delta;
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
               const chunkDelta: Record<string, unknown> = {};
               if (processed.content !== undefined) chunkDelta.content = processed.content;
@@ -1373,7 +1384,7 @@ async function streamGateway(
                   choices: [],
                   usage: parsed.usage,
                 }) + "\n\n"));
-              }              const delta = parsed.choices?.[0]?.delta;
+              } const delta = parsed.choices?.[0]?.delta;
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
               const chunkDelta: Record<string, unknown> = {};
@@ -1705,63 +1716,63 @@ async function streamGateway(
   // This upstream accepts only model+messages, so it cannot honour native
   // tool calling. Skip it rather than silently dropping the client's tools.
   if (!hasTools) {
-  try {
-    const reqLower = requestedRawModel.toLowerCase();
-    let fmModel = FREEMODELS_UPSTREAM_MAP[reqLower];
-    if (!fmModel) {
-      if (reqLower.includes("deepseek") || reqLower.includes("r1")) {
-        fmModel = "deepseek-v3";
-      } else if (reqLower.includes("qwen") || reqLower.includes("coder")) {
-        fmModel = "qwen";
-      } else if (reqLower.includes("claude") || reqLower.includes("sonnet")) {
-        fmModel = "claude-3-5-sonnet";
-      } else if (reqLower.includes("gpt") || reqLower.includes("o1") || reqLower.includes("o3") || reqLower.includes("4o")) {
-        fmModel = "gpt-4o";
-      } else {
-        fmModel = "deepseek-v3";
+    try {
+      const reqLower = requestedRawModel.toLowerCase();
+      let fmModel = FREEMODELS_UPSTREAM_MAP[reqLower];
+      if (!fmModel) {
+        if (reqLower.includes("deepseek") || reqLower.includes("r1")) {
+          fmModel = "deepseek-v3";
+        } else if (reqLower.includes("qwen") || reqLower.includes("coder")) {
+          fmModel = "qwen";
+        } else if (reqLower.includes("claude") || reqLower.includes("sonnet")) {
+          fmModel = "claude-3-5-sonnet";
+        } else if (reqLower.includes("gpt") || reqLower.includes("o1") || reqLower.includes("o3") || reqLower.includes("4o")) {
+          fmModel = "gpt-4o";
+        } else {
+          fmModel = "deepseek-v3";
+        }
       }
-    }
-    const fmRes = await fetchWithHeaderTimeout(FREEMODELS_URL, {
-      method: "POST",
-      headers: {
-        ...FREEMODELS_HEADERS,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
-      },
-      body: JSON.stringify({
-        model: fmModel,
-        messages: effectiveMessages,
-      }),
-    }, 30_000, clientSignal);
+      const fmRes = await fetchWithHeaderTimeout(FREEMODELS_URL, {
+        method: "POST",
+        headers: {
+          ...FREEMODELS_HEADERS,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
+        },
+        body: JSON.stringify({
+          model: fmModel,
+          messages: effectiveMessages,
+        }),
+      }, 30_000, clientSignal);
 
-    if (fmRes.ok && fmRes.body) {
+      if (fmRes.ok && fmRes.body) {
         emitServedModel(fmModel);
-      clearInterval(pingInterval);
-      const reader = fmRes.body.getReader();
-      let buffer = "";
-      const processor = new StreamChunkProcessor();
+        clearInterval(pingInterval);
+        const reader = fmRes.body.getReader();
+        let buffer = "";
+        const processor = new StreamChunkProcessor();
 
-      let lastFinishReason: string | null = null;
-      let hasSeenToolCalls = false;
+        let lastFinishReason: string | null = null;
+        let hasSeenToolCalls = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          if (trimmed === "data: [DONE]") {
-            if (!lastFinishReason) {
-              emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
-              controller.enqueue(encoder.encode("data: " + JSON.stringify({
-                id: reqId,
-                object: "chat.completion.chunk",
-                created: createdTimestamp,
-                model: requestedRawModel,
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            if (trimmed === "data: [DONE]") {
+              if (!lastFinishReason) {
+                emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+                controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                  id: reqId,
+                  object: "chat.completion.chunk",
+                  created: createdTimestamp,
+                  model: requestedRawModel,
                   choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
                 }) + "\n\n"));
               }
@@ -1793,46 +1804,46 @@ async function streamGateway(
                 }
               }
 
-            emittedTokensCount++;
-            const chunk = {
-              id: reqId,
-              object: "chat.completion.chunk",
-              created: createdTimestamp,
-              model: requestedRawModel,
-              choices: [
-                {
-                  index: 0,
-                  delta: chunkDelta,
-                  finish_reason: parsed.choices?.[0]?.finish_reason ? normalizeFinishReason(parsed.choices[0].finish_reason, hasSeenToolCalls || processor.hasSeenAnyToolCalls) : null,
-                },
-              ],
-            };
-            controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
-          } catch { }
+              emittedTokensCount++;
+              const chunk = {
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: chunkDelta,
+                    finish_reason: parsed.choices?.[0]?.finish_reason ? normalizeFinishReason(parsed.choices[0].finish_reason, hasSeenToolCalls || processor.hasSeenAnyToolCalls) : null,
+                  },
+                ],
+              };
+              controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
+            } catch { }
+          }
         }
-      }
-      if (!lastFinishReason) {
-        emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
-        controller.enqueue(encoder.encode("data: " + JSON.stringify({
-          id: reqId,
-          object: "chat.completion.chunk",
-          created: createdTimestamp,
+        if (!lastFinishReason) {
+          emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
+          }) + "\n\n"));
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        recordTelemetryRequest({
           model: requestedRawModel,
-          choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
-        }) + "\n\n"));
+          totalTokens: Math.max(30, emittedTokensCount),
+          latencyMs: Date.now() - streamStartTime,
+          status: "success",
+          apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
+        });
+        controller.close();
+        return;
       }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      recordTelemetryRequest({
-        model: requestedRawModel,
-        totalTokens: Math.max(30, emittedTokensCount),
-        latencyMs: Date.now() - streamStartTime,
-        status: "success",
-        apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
-      });
-      controller.close();
-      return;
-    }
-  } catch (fmErr) { }
+    } catch (fmErr) { }
   }
 
   clearInterval(pingInterval);

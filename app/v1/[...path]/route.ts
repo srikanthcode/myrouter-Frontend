@@ -2426,6 +2426,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
   // ── 2. GET /v1/models/:modelId (Inspection for client tools) ──
   if (subpath.startsWith("models/") && req.method === "GET") {
+    const credential = getCallerCredential(req);
+    if (credential.apiKey && BACKEND_BASE) {
+      return proxyToBackend(req, subpath);
+    }
     const requestedId = subpath.slice("models/".length).trim();
     const found = ALL_MODELS.find(
       (m) => m.id.toLowerCase() === requestedId.toLowerCase()

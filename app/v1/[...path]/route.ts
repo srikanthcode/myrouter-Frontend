@@ -50,7 +50,7 @@ function getNextNabhKey(): string | null {
 }
 
 // ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
-const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/+$/, "");
 const DEFAULT_GATEWAY_BASE = "https://api.tokenjuice.ai/v1";
 const GATEWAY_BASE = (process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || DEFAULT_GATEWAY_BASE).replace(/\/+$/, "");
 const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-1017";
@@ -1588,9 +1588,14 @@ async function streamGateway(
     const key = getNextNabhKey();
     if (!key) break;
     try {
+      const nabhModel = requestedRawModel.includes("gpt-oss-20b")
+        ? "gpt-oss-20b"
+        : requestedRawModel.includes("gpt-oss-120b")
+          ? "gpt-oss-120b"
+          : requestedRawModel;
       const nabhBody: Record<string, unknown> = {
         ...payload,
-        model: "gpt-oss-20b",
+        model: nabhModel,
         messages: effectiveMessages,
         stream: true,
       };
@@ -1611,7 +1616,7 @@ async function streamGateway(
       else if (res.status >= 500) markNabhCooldown(key, 15_000);
 
       if (res.ok && res.body) {
-        emitServedModel("gpt-oss-20b");
+        emitServedModel(nabhModel);
         clearInterval(pingInterval);
         const reader = res.body.getReader();
         let buffer = "";
@@ -2432,7 +2437,30 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     if (credential.apiKey && BACKEND_BASE) {
       return proxyToBackend(req, "models");
     }
-    return NextResponse.json({ object: "list", data: ALL_MODELS }, { headers: CORS_HEADERS });
+    const enrichedModels = ALL_MODELS.map((m) => ({
+      ...m,
+      context_window: (m as any).context_window || 128000,
+      context_length: (m as any).context_window || 128000,
+      max_output_tokens: (m as any).max_output_tokens || 16384,
+      max_completion_tokens: (m as any).max_output_tokens || 16384,
+      supported_parameters: [
+        "tools",
+        "tool_choice",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "stream",
+        "response_format",
+      ],
+      capabilities: {
+        tool_calls: true,
+        streaming: true,
+        reasoning: true,
+        vision: true,
+      },
+    }));
+    return NextResponse.json({ object: "list", data: enrichedModels }, { headers: CORS_HEADERS });
   }
 
   // ── 2. GET /v1/models/:modelId (Inspection for client tools) ──
@@ -2459,13 +2487,37 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       );
     }
 
-    const model = found || {
+    const baseModel = found || {
       id: requestedId || "deepseek-v4.1-flash",
       name: requestedId || "DeepSeek V4.1 Flash",
       object: "model",
       created: 1710000000,
       owned_by: "prorouter",
       description: `${requestedId} model endpoint`,
+    };
+
+    const model = {
+      ...baseModel,
+      context_window: (baseModel as any).context_window || 128000,
+      context_length: (baseModel as any).context_window || 128000,
+      max_output_tokens: (baseModel as any).max_output_tokens || 16384,
+      max_completion_tokens: (baseModel as any).max_output_tokens || 16384,
+      supported_parameters: [
+        "tools",
+        "tool_choice",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "stream",
+        "response_format",
+      ],
+      capabilities: {
+        tool_calls: true,
+        streaming: true,
+        reasoning: true,
+        vision: true,
+      },
     };
 
     return NextResponse.json(model, { headers: CORS_HEADERS });
@@ -2688,9 +2740,14 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       const key = getNextNabhKey();
       if (!key) break;
       try {
+        const nabhModel = requestedRawModel.includes("gpt-oss-20b")
+          ? "gpt-oss-20b"
+          : requestedRawModel.includes("gpt-oss-120b")
+            ? "gpt-oss-120b"
+            : requestedRawModel;
         const nabhBody: Record<string, unknown> = {
           ...payload,
-          model: "gpt-oss-20b",
+          model: nabhModel,
           messages: effectiveMessages,
           stream: false,
         };
@@ -2734,7 +2791,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                 finish_reason: normalizeFinishReason(data.choices?.[0]?.finish_reason, Array.isArray(cleanedMsg.tool_calls) && cleanedMsg.tool_calls.length > 0),
               }],
               usage: data.usage || { prompt_tokens: 20, completion_tokens: 50, total_tokens: 70 },
-            }, { status: 200, headers: modelHonestyHeaders(requestedRawModel, "gpt-oss-20b") });
+            }, { status: 200, headers: modelHonestyHeaders(requestedRawModel, nabhModel) });
           }
         }
       } catch (e) { }
@@ -3262,9 +3319,14 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       const key = getNextNabhKey();
       if (!key) break;
       try {
+        const nabhModel = requestedRawModel.includes("gpt-oss-20b")
+          ? "gpt-oss-20b"
+          : requestedRawModel.includes("gpt-oss-120b")
+            ? "gpt-oss-120b"
+            : requestedRawModel;
         const nabhBody: Record<string, unknown> = {
           ...openAiPayload,
-          model: "gpt-oss-20b",
+          model: nabhModel,
           messages: convertedMessages,
           stream: false,
         };
@@ -3325,7 +3387,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             stop_reason: stopReason,
             stop_sequence: null,
             usage: data.usage ? { input_tokens: data.usage.prompt_tokens || 0, output_tokens: data.usage.completion_tokens || 0 } : { input_tokens: 0, output_tokens: 0 },
-          }, { headers: modelHonestyHeaders(requestedRawModel, "gpt-oss-20b") });
+          }, { headers: modelHonestyHeaders(requestedRawModel, nabhModel) });
         }
       } catch { }
     }

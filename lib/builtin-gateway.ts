@@ -232,6 +232,24 @@ function astraState(wallet: FallbackWallet) {
   };
 }
 
+export function canonicalizeEmail(email: string): string {
+  if (!email || typeof email !== "string") return "";
+  const trimmed = email.trim().toLowerCase();
+  const atIndex = trimmed.lastIndexOf("@");
+  if (atIndex === -1) return trimmed;
+  let username = trimmed.slice(0, atIndex);
+  let domain = trimmed.slice(atIndex + 1);
+
+  if (domain === "googlemail.com") domain = "gmail.com";
+
+  if (domain === "gmail.com") {
+    username = username.split("+")[0];
+    username = username.replace(/\./g, "");
+  }
+
+  return `${username}@${domain}`;
+}
+
 export function isValidGmail(email: string): boolean {
   if (!email || typeof email !== "string") return false;
   const trimmed = email.trim().toLowerCase();
@@ -240,7 +258,21 @@ export function isValidGmail(email: string): boolean {
   if (!trimmed.endsWith("@gmail.com")) return false;
   const username = trimmed.slice(0, trimmed.length - "@gmail.com".length);
   const gmailRegex = /^[a-z0-9](?!.*\.\.)[a-z0-9.]{4,28}[a-z0-9]$/;
-  return gmailRegex.test(username);
+  if (!gmailRegex.test(username)) return false;
+
+  // Strict anti-alias check: block Gmail dot-tricks (e.g. carlabro.o.ks.83.4.2@gmail.com)
+  const dotCount = (username.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    return false;
+  }
+  if (dotCount === 1) {
+    const parts = username.split(".");
+    if (parts.some((p) => p.length < 2)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function generateDeterministicUserId(identifier: string): string {
@@ -280,14 +312,17 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!isValidGmail(email)) {
-      return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
+      return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails, dot-trick aliases, and aliases with '+' are not permitted." } }, { status: 400 });
     }
     const problem = passwordProblem(body.password);
     if (problem) {
       return NextResponse.json({ error: { code: "invalid_request", message: problem } }, { status: 400 });
     }
-    if (demoUsers.has(email)) {
-      return NextResponse.json({ error: { code: "invalid_request", message: "An account with this Gmail already exists. Please sign in instead." } }, { status: 409 });
+    const canonical = canonicalizeEmail(email);
+    for (const existingEmail of demoUsers.keys()) {
+      if (canonicalizeEmail(existingEmail) === canonical) {
+        return NextResponse.json({ error: { code: "invalid_request", message: "An account with this Gmail already exists. Please sign in instead." } }, { status: 409 });
+      }
     }
     const salt = randomBytes(16).toString("hex");
     demoUsers.set(email, { passwordHash: hashPassword(body.password, salt), salt, name: name || email.split("@")[0] });
@@ -302,12 +337,23 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     if (!isValidGmail(email)) {
       return NextResponse.json({ error: { code: "invalid_request", message: "Only official standard Google Gmail accounts (@gmail.com) are allowed. Temporary emails and aliases with '+' are not permitted." } }, { status: 400 });
     }
-    const record = demoUsers.get(email);
+    const canonical = canonicalizeEmail(email);
+    let record = demoUsers.get(email);
+    let actualEmail = email;
+    if (!record) {
+      for (const [e, u] of demoUsers.entries()) {
+        if (canonicalizeEmail(e) === canonical) {
+          record = u;
+          actualEmail = e;
+          break;
+        }
+      }
+    }
     const password = typeof body.password === "string" ? body.password : "";
     if (!record || !verifyPassword(password, record.salt, record.passwordHash)) {
       return NextResponse.json({ error: { code: "unauthenticated", message: "Incorrect Gmail or password." } }, { status: 401 });
     }
-    return sessionResponse(buildUser(email, record.name), 200);
+    return sessionResponse(buildUser(actualEmail, record.name), 200);
   }
 
   // ── Auth: Logout ──

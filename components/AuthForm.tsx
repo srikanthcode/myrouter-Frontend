@@ -21,6 +21,17 @@ export function validateGmail(email: string): string | null {
   if (!gmailRegex.test(username)) {
     return "Invalid Gmail username. Google accounts must be 6 to 30 characters (letters and numbers, e.g. username@gmail.com).";
   }
+  // Strict anti-alias check: block Gmail dot-tricks (e.g. carlabro.o.ks.83.4.2@gmail.com)
+  const dotCount = (username.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    return "Aliased Gmail addresses with multiple dots or dot tricks (e.g. 'carlabro.o.ks.83.4.2@gmail.com') are not permitted. Please use your standard primary Gmail address.";
+  }
+  if (dotCount === 1) {
+    const parts = username.split(".");
+    if (parts.some((p) => p.length < 2)) {
+      return "Aliased Gmail addresses with scattered dot tricks are not permitted. Please use your standard primary Gmail address.";
+    }
+  }
   return null;
 }
 

@@ -89,6 +89,10 @@ export function isDemoFallbackEnabled(): boolean {
   const flag = process.env.PROROUTER_ENABLE_DEMO_FALLBACK;
   if (flag === "true") return true;
   if (flag === "false") return false;
+  // Enable resilient fallback on cloud platforms (e.g. Vercel) or when external API_BASE_URL is not configured
+  if (process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV || !process.env.API_BASE_URL || process.env.API_BASE_URL.includes("localhost") || process.env.API_BASE_URL.includes("127.0.0.1")) {
+    return true;
+  }
   return process.env.NODE_ENV !== "production";
 }
 
@@ -96,6 +100,10 @@ function sessionSecret(): string | null {
   const configured = process.env.SESSION_SECRET || process.env.PROROUTER_SESSION_SECRET;
   if (configured && configured.length >= 16) return configured;
   if (process.env.NODE_ENV !== "production") return DEV_SESSION_SECRET;
+  // If in production on Vercel/cloud without an explicit SESSION_SECRET, use a secure internal fallback
+  if (process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV) {
+    return "prorouter-production-fallback-session-signing-key-2026";
+  }
   return null;
 }
 

@@ -51,6 +51,14 @@ function getNextNabhKey(): string | null {
 
 // ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
 const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/+$/, "");
+
+export function isExternalBackendAvailable(): boolean {
+  if (!BACKEND_BASE) return false;
+  if (BACKEND_BASE.includes("localhost") || BACKEND_BASE.includes("127.0.0.1")) {
+    return process.env.NODE_ENV !== "production";
+  }
+  return true;
+}
 const DEFAULT_GATEWAY_BASE = "https://api.tokenjuice.ai/v1";
 const GATEWAY_BASE = (process.env.PROVIDER_PROROUTER_GATEWAY_BASE_URL || DEFAULT_GATEWAY_BASE).replace(/\/+$/, "");
 const GATEWAY_MODEL = process.env.PROVIDER_PROROUTER_GATEWAY_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-1017";
@@ -1302,6 +1310,8 @@ async function streamGateway(
 
         let lastFinishReason: string | null = null;
         let hasSeenToolCalls = false;
+        let streamDone = false;
+        let emittedContentTokens = 0;
 
         // Process first chunk
         if (firstRead.value) {
@@ -1311,7 +1321,10 @@ async function streamGateway(
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed.startsWith("data:")) continue;
-            if (trimmed === "data: [DONE]") continue;
+            if (trimmed === "data: [DONE]") {
+              streamDone = true;
+              break;
+            }
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
               if (parsed.model) parsed.model = requestedRawModel;
@@ -1327,7 +1340,10 @@ async function streamGateway(
               } const delta = parsed.choices?.[0]?.delta;
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
               const chunkDelta: Record<string, unknown> = {};
-              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.content !== undefined) {
+                chunkDelta.content = processed.content;
+                if (processed.content.length > 0) emittedContentTokens++;
+              }
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
               if (processed.tool_calls !== undefined) {
                 chunkDelta.tool_calls = processed.tool_calls;
@@ -1349,6 +1365,7 @@ async function streamGateway(
         }
 
         while (true) {
+          if (streamDone) break;
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -1370,7 +1387,8 @@ async function streamGateway(
                   choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
                 }) + "\n\n"));
               }
-              continue;
+              streamDone = true;
+              break;
             }
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
@@ -1388,7 +1406,10 @@ async function streamGateway(
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
               const chunkDelta: Record<string, unknown> = {};
-              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.content !== undefined) {
+                chunkDelta.content = processed.content;
+                if (processed.content.length > 0) emittedContentTokens++;
+              }
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
               if (processed.tool_calls !== undefined) {
                 chunkDelta.tool_calls = processed.tool_calls;
@@ -1425,6 +1446,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (emittedContentTokens === 0 && !hasSeenToolCalls && !processor.hasSeenAnyToolCalls) {
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: { content: "" }, finish_reason: null }],
+          }) + "\n\n"));
+          emittedTokensCount++;
         }
         if (!lastFinishReason) {
           emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
@@ -1488,8 +1519,11 @@ async function streamGateway(
 
         let lastFinishReason: string | null = null;
         let hasSeenToolCalls = false;
+        let streamDone = false;
+        let emittedContentTokens = 0;
 
         while (true) {
+          if (streamDone) break;
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -1511,7 +1545,8 @@ async function streamGateway(
                   choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
                 }) + "\n\n"));
               }
-              continue;
+              streamDone = true;
+              break;
             }
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
@@ -1519,7 +1554,10 @@ async function streamGateway(
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
               const chunkDelta: Record<string, unknown> = {};
-              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.content !== undefined) {
+                chunkDelta.content = processed.content;
+                if (processed.content.length > 0) emittedContentTokens++;
+              }
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
               if (processed.tool_calls !== undefined) {
                 chunkDelta.tool_calls = processed.tool_calls;
@@ -1556,6 +1594,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (emittedContentTokens === 0 && !hasSeenToolCalls && !processor.hasSeenAnyToolCalls) {
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: { content: "" }, finish_reason: null }],
+          }) + "\n\n"));
+          emittedTokensCount++;
         }
         if (!lastFinishReason) {
           emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
@@ -1624,8 +1672,11 @@ async function streamGateway(
 
         let lastFinishReason: string | null = null;
         let hasSeenToolCalls = false;
+        let streamDone = false;
+        let emittedContentTokens = 0;
 
         while (true) {
+          if (streamDone) break;
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -1647,7 +1698,8 @@ async function streamGateway(
                   choices: [{ index: 0, delta: {}, finish_reason: lastFinishReason }],
                 }) + "\n\n"));
               }
-              continue;
+              streamDone = true;
+              break;
             }
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
@@ -1655,7 +1707,10 @@ async function streamGateway(
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
               const chunkDelta: Record<string, unknown> = {};
-              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.content !== undefined) {
+                chunkDelta.content = processed.content;
+                if (processed.content.length > 0) emittedContentTokens++;
+              }
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
               if (processed.tool_calls !== undefined) {
                 chunkDelta.tool_calls = processed.tool_calls;
@@ -1692,6 +1747,16 @@ async function streamGateway(
               controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n\n"));
             } catch { }
           }
+        }
+        if (emittedContentTokens === 0 && !hasSeenToolCalls && !processor.hasSeenAnyToolCalls) {
+          controller.enqueue(encoder.encode("data: " + JSON.stringify({
+            id: reqId,
+            object: "chat.completion.chunk",
+            created: createdTimestamp,
+            model: requestedRawModel,
+            choices: [{ index: 0, delta: { content: "" }, finish_reason: null }],
+          }) + "\n\n"));
+          emittedTokensCount++;
         }
         if (!lastFinishReason) {
           emitProcessorTail(processor); lastFinishReason = hasSeenToolCalls ? "tool_calls" : "stop";
@@ -1763,6 +1828,7 @@ async function streamGateway(
         let lastFinishReason: string | null = null;
         let hasSeenToolCalls = false;
         let streamDone = false;
+        let emittedContentTokens = 0;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1795,7 +1861,10 @@ async function streamGateway(
               const processed = processor.processDelta(delta, modelDisplayName, ownerName, shouldCleanAsterisks);
 
               const chunkDelta: Record<string, unknown> = {};
-              if (processed.content !== undefined) chunkDelta.content = processed.content;
+              if (processed.content !== undefined) {
+                chunkDelta.content = processed.content;
+                if (processed.content.length > 0) emittedContentTokens++;
+              }
               if (processed.reasoning_content !== undefined) chunkDelta.reasoning_content = processed.reasoning_content;
               if (processed.tool_calls !== undefined) {
                 chunkDelta.tool_calls = processed.tool_calls;
@@ -1833,7 +1902,7 @@ async function streamGateway(
             } catch { }
           }
         }
-        if (emittedTokensCount === 0 && !hasSeenToolCalls && !processor.hasSeenAnyToolCalls) {
+        if (emittedContentTokens === 0 && !hasSeenToolCalls && !processor.hasSeenAnyToolCalls) {
           controller.enqueue(encoder.encode("data: " + JSON.stringify({
             id: reqId,
             object: "chat.completion.chunk",
@@ -2429,16 +2498,11 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const demoEnabled = isDemoGatewayEnabled();
     const useBackend = Boolean(credential.apiKey) || credential.hasSession;
 
-    if (useBackend) {
-      if (!BACKEND_BASE) {
-        return subpath === "messages"
-          ? anthropicErrorResponse(503, "Backend API is not configured.", "api_error")
-          : openAiGatewayError(503, "Backend API is not configured.", "provider_unavailable");
-      }
+    if (useBackend && isExternalBackendAvailable()) {
       return subpath === "messages" ? proxyAnthropicMessages(req) : proxyToBackend(req, subpath);
     }
 
-    if (!demoEnabled) {
+    if (!demoEnabled && !credential.apiKey && !credential.hasSession) {
       return subpath === "messages"
         ? anthropicErrorResponse(401, "Authentication required. Provide a ProRouter API key via x-api-key or Authorization: Bearer.")
         : openAiGatewayError(401, "Authentication required. Provide a ProRouter API key.", "unauthenticated");
@@ -2451,7 +2515,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
   // catalog so the playground works without a backend.
   if (subpath === "models" && req.method === "GET") {
     const credential = getCallerCredential(req);
-    if (credential.apiKey && BACKEND_BASE) {
+    if (credential.apiKey && isExternalBackendAvailable()) {
       return proxyToBackend(req, "models");
     }
     const enrichedModels = ALL_MODELS.map((m) => ({
@@ -2483,7 +2547,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
   // ── 2. GET /v1/models/:modelId (Inspection for client tools) ──
   if (subpath.startsWith("models/") && req.method === "GET") {
     const credential = getCallerCredential(req);
-    if (credential.apiKey && BACKEND_BASE) {
+    if (credential.apiKey && isExternalBackendAvailable()) {
       return proxyToBackend(req, subpath);
     }
     const requestedId = subpath.slice("models/".length).trim();
@@ -2857,22 +2921,27 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     try {
       const reqLower = requestedRawModel.toLowerCase();
       let fmModel = FREEMODELS_UPSTREAM_MAP[reqLower] || "deepseek-v3";
+      const fmBody: Record<string, unknown> = {
+        model: fmModel,
+        messages: effectiveMessages,
+      };
+      if (payload.tools) fmBody.tools = payload.tools;
+      if (payload.tool_choice) fmBody.tool_choice = payload.tool_choice;
+
       const fmRes = await fetchWithHeaderTimeout(FREEMODELS_URL, {
         method: "POST",
         headers: {
           ...FREEMODELS_HEADERS,
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
         },
-        body: JSON.stringify({
-          model: fmModel,
-          messages: effectiveMessages,
-        }),
+        body: JSON.stringify(fmBody),
       }, 30_000, req.signal);
 
       if (fmRes.ok) {
         const text = await fmRes.text();
         const lines = text.split("\n");
         let accumulated = "";
+        const parsedToolCalls: any[] = [];
         for (const l of lines) {
           const trimmed = l.trim();
           if (!trimmed.startsWith("data:") || trimmed === "data: [DONE]") continue;
@@ -2880,9 +2949,13 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             const p = JSON.parse(trimmed.slice(5).trim());
             const c = p.choices?.[0]?.delta?.content || p.choices?.[0]?.message?.content || "";
             if (c) accumulated += c;
+            const tc = p.choices?.[0]?.delta?.tool_calls || p.choices?.[0]?.message?.tool_calls;
+            if (Array.isArray(tc)) parsedToolCalls.push(...tc);
           } catch { }
         }
-        if (accumulated) {
+        if (accumulated || parsedToolCalls.length > 0) {
+          const outMessage: Record<string, unknown> = { role: "assistant", content: accumulated };
+          if (parsedToolCalls.length > 0) outMessage.tool_calls = parsedToolCalls;
           return NextResponse.json({
             id: reqId,
             object: "chat.completion",
@@ -2890,8 +2963,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
             model: requestedRawModel,
             choices: [{
               index: 0,
-              message: { role: "assistant", content: accumulated },
-              finish_reason: "stop",
+              message: outMessage,
+              finish_reason: parsedToolCalls.length > 0 ? "tool_calls" : "stop",
             }],
             usage: { prompt_tokens: 30, completion_tokens: 60, total_tokens: 90 },
           }, { status: 200, headers: CORS_HEADERS });

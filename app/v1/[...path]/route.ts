@@ -127,7 +127,7 @@ export async function fetchGatewayWithRetry(
     }
     const headerTimer = setTimeout(
       () => ctrl.abort(new Error("Upstream gateway header timeout")),
-      30_000
+      12_000
     );
 
     try {
@@ -1341,11 +1341,11 @@ async function streamGateway(
         emitServedModel(GATEWAY_MODEL);
         const reader = upstreamRes.body.getReader();
 
-        // Wait up to 45s for first chunk from deep reasoning models
+        // Wait up to 12s for first chunk from upstream model before falling back to secondary cluster
         let firstRead: { done: boolean; value?: Uint8Array };
         try {
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("First chunk timeout")), 45_000)
+            setTimeout(() => reject(new Error("First chunk timeout")), 12_000)
           );
           firstRead = await Promise.race([reader.read(), timeoutPromise]);
         } catch (firstErr) {
@@ -2743,18 +2743,36 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           const encoder = new TextEncoder();
           const decoder = new TextDecoder();
 
-          // Immediately send initial chunk so client connect timeout (10s) NEVER triggers
-          const initialChunk = `data: ${JSON.stringify({
-            id: reqId,
-            object: "chat.completion.chunk",
-            created: createdTimestamp,
-            model: requestedRawModel,
-            choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
-          })}\n\n`;
-          controller.enqueue(encoder.encode(initialChunk));
+          try {
+            // Immediately send initial chunk so client connect timeout (10s) NEVER triggers
+            const initialChunk = `data: ${JSON.stringify({
+              id: reqId,
+              object: "chat.completion.chunk",
+              created: createdTimestamp,
+              model: requestedRawModel,
+              choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
+            })}\n\n`;
+            controller.enqueue(encoder.encode(initialChunk));
 
-          // Unified ProRouter Gateway Engine for all models
-          await streamGateway(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks, modelDisplayName, ownerName, clientKey, req.signal);
+            // Unified ProRouter Gateway Engine for all models
+            await streamGateway(controller, encoder, decoder, reqId, createdTimestamp, requestedRawModel, effectiveMessages, payload, shouldCleanAsterisks, modelDisplayName, ownerName, clientKey, req.signal);
+          } catch (streamErr) {
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                id: reqId,
+                object: "chat.completion.chunk",
+                created: createdTimestamp,
+                model: requestedRawModel,
+                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                error: {
+                  message: streamErr instanceof Error ? streamErr.message : "Gateway stream interrupted, please retry",
+                  type: "gateway_error",
+                  code: "stream_interrupted",
+                },
+              })}\n\ndata: [DONE]\n\n`));
+              controller.close();
+            } catch { }
+          }
         },
       });
 
@@ -3341,21 +3359,25 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               try { controller.close(); } catch { }
             },
           };
-          await streamGateway(
-            anthropicController,
-            encoder,
-            decoder,
-            msgId,
-            createdTimestamp,
-            requestedRawModel,
-            convertedMessages,
-            openAiPayload,
-            false,
-            modelDisplayName,
-            ownerName,
-            clientKey,
-            req.signal
-          );
+          try {
+            await streamGateway(
+              anthropicController,
+              encoder,
+              decoder,
+              msgId,
+              createdTimestamp,
+              requestedRawModel,
+              convertedMessages,
+              openAiPayload,
+              false,
+              modelDisplayName,
+              ownerName,
+              clientKey,
+              req.signal
+            );
+          } catch {
+            try { controller.close(); } catch { }
+          }
 
           try { controller.close(); } catch { }
         },

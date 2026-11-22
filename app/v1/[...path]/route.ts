@@ -1027,6 +1027,25 @@ export function cleanAsterisks(text: string): string {
   return res;
 }
 
+/**
+ * Removes internal channel transition tokens and residual upstream markup tags
+ * (e.g. DeepSeek's assistant<|channel|>final, <|channel|>thought, <|channel|>, DSML tags)
+ */
+export function cleanSpecialTokens(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/(?:assistant)?<[｜|]channel[｜|]>[a-zA-Z0-9_-]*/gi, "")
+    .replace(/<[｜|][\s\S]*?[｜|]>/g, "")
+    .replace(/<\/?(?:｜|\|)[^>]*>/g, "")
+    .replace(/<\|channel\|>[a-zA-Z0-9_-]*/gi, "");
+}
+
+/** Checks whether a tool name is a leaked channel token rather than an actual tool */
+export function isChannelTokenToolCall(name?: string): boolean {
+  if (!name) return false;
+  return /^(?:assistant)?<[｜|]channel[｜|]>/i.test(name) || /<\|channel\|>/i.test(name) || name.trim() === "final";
+}
+
 const THINK_OPEN_TAG = "\u003cthink\u003e";
 const THINK_CLOSE_TAG = "\u003c/think\u003e";
 
@@ -1066,8 +1085,27 @@ export class StreamChunkProcessor {
 
     // Upstream tool_calls preservation (essential for coding agents like Cline/Cursor)
     if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
-      outToolCalls = delta.tool_calls;
-      this.hasSeenAnyToolCalls = true;
+      const sanitizedTools: unknown[] = [];
+      for (const tc of delta.tool_calls as any[]) {
+        const rawName = tc?.function?.name;
+        if (rawName && isChannelTokenToolCall(rawName)) {
+          continue;
+        }
+        const cleanedArgs = typeof tc?.function?.arguments === "string" ? cleanSpecialTokens(tc.function.arguments) : tc?.function?.arguments;
+        const cleanedName = typeof rawName === "string" ? cleanSpecialTokens(rawName) : rawName;
+        sanitizedTools.push({
+          ...tc,
+          function: {
+            ...tc?.function,
+            name: cleanedName,
+            arguments: cleanedArgs,
+          },
+        });
+      }
+      if (sanitizedTools.length > 0) {
+        outToolCalls = sanitizedTools;
+        this.hasSeenAnyToolCalls = true;
+      }
     }
 
     // Upstream reasoning fields (never emit into content)
@@ -1145,6 +1183,7 @@ export class StreamChunkProcessor {
       }
 
       if (cleanText) {
+        cleanText = cleanSpecialTokens(cleanText);
         if (shouldCleanAsterisks) cleanText = cleanAsterisks(cleanText);
         this.accumulatedContent += cleanText;
         this.totalContentLength += cleanText.length;
@@ -1164,7 +1203,8 @@ export class StreamChunkProcessor {
       this.accumulatedReasoning += tail;
       return { reasoning_content: tail };
     }
-    const content = shouldCleanAsterisks ? cleanAsterisks(tail) : tail;
+    let content = cleanSpecialTokens(tail);
+    if (shouldCleanAsterisks) content = cleanAsterisks(content);
     this.accumulatedContent += content;
     this.totalContentLength += content.length;
     return { content };
@@ -1201,16 +1241,29 @@ export function cleanNonStreamingMessage(
     content = content.slice(metaMatch[0].length).trim();
   }
 
+  content = cleanSpecialTokens(content);
   if (shouldCleanAsterisks) content = cleanAsterisks(content);
 
-  const toolCalls = Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0 ? msg.tool_calls : undefined;
+  const rawToolCalls = Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0 ? msg.tool_calls : undefined;
+  const toolCalls = rawToolCalls
+    ? (rawToolCalls as any[])
+        .filter((tc) => !isChannelTokenToolCall(tc?.function?.name))
+        .map((tc) => ({
+          ...tc,
+          function: {
+            ...tc?.function,
+            name: typeof tc?.function?.name === "string" ? cleanSpecialTokens(tc.function.name) : tc?.function?.name,
+            arguments: typeof tc?.function?.arguments === "string" ? cleanSpecialTokens(tc.function.arguments) : tc?.function?.arguments,
+          },
+        }))
+    : undefined;
 
   const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {
     role: "assistant",
     content,
   };
-  if (reasoning) result.reasoning_content = reasoning;
-  if (toolCalls) result.tool_calls = toolCalls;
+  if (reasoning) result.reasoning_content = cleanSpecialTokens(reasoning);
+  if (toolCalls && toolCalls.length > 0) result.tool_calls = toolCalls;
   return result;
 }
 
@@ -2374,6 +2427,9 @@ function anthropicSseFromOpenAi(upstream: Response, conversion: AnthropicConvers
                 emit("content_block_stop", { type: "content_block_stop", index: textBlockIndex });
               }
               for (const tc of delta.tool_calls as any[]) {
+                if (tc?.function?.name && isChannelTokenToolCall(tc.function.name)) {
+                  continue;
+                }
                 const tcIndex = typeof tc.index === "number" ? tc.index : 0;
                 let toolBlock = toolBlocks.get(tcIndex);
                 if (!toolBlock) {
@@ -2381,7 +2437,7 @@ function anthropicSseFromOpenAi(upstream: Response, conversion: AnthropicConvers
                   toolBlock = {
                     blockIndex,
                     id: tc.id || ("toolu_" + Math.random().toString(36).slice(2, 10)),
-                    name: tc.function?.name || "tool",
+                    name: cleanSpecialTokens(tc.function?.name || "tool") || "tool",
                   };
                   toolBlocks.set(tcIndex, toolBlock);
                   emit("content_block_start", {
@@ -2399,7 +2455,7 @@ function anthropicSseFromOpenAi(upstream: Response, conversion: AnthropicConvers
                   emit("content_block_delta", {
                     type: "content_block_delta",
                     index: toolBlock.blockIndex,
-                    delta: { type: "input_json_delta", partial_json: tc.function.arguments },
+                    delta: { type: "input_json_delta", partial_json: cleanSpecialTokens(tc.function.arguments) },
                   });
                 }
               }
@@ -3224,7 +3280,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                   })}\n\n`));
                 }
 
-                for (const tc of delta.tool_calls) {
+                for (const tc of delta.tool_calls as any[]) {
+                  if (tc?.function?.name && isChannelTokenToolCall(tc.function.name)) {
+                    continue;
+                  }
                   const tcIdx = typeof tc.index === "number" ? tc.index : 0;
                   let toolBlock = toolBlockMap.get(tcIdx);
                   if (!toolBlock) {
@@ -3232,7 +3291,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                     toolBlock = {
                       blockIndex: bIdx,
                       id: tc.id || ("toolu_" + Math.random().toString(36).slice(2, 10)),
-                      name: tc.function?.name || "tool",
+                      name: cleanSpecialTokens(tc.function?.name || "tool") || "tool",
                     };
                     toolBlockMap.set(tcIdx, toolBlock);
                     controller.enqueue(encoder.encode(`event: content_block_start\ndata: ${JSON.stringify({
@@ -3251,7 +3310,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
                     controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify({
                       type: "content_block_delta",
                       index: toolBlock.blockIndex,
-                      delta: { type: "input_json_delta", partial_json: tc.function.arguments },
+                      delta: { type: "input_json_delta", partial_json: cleanSpecialTokens(tc.function.arguments) },
                     })}\n\n`));
                   }
                 }

@@ -1,10 +1,6 @@
 // Real-time Unified Telemetry Store for ProRouter
 // Tracks real requests from /v1/chat/completions, Playground, and external API clients in real time.
 
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
-
 export interface TelemetryRecord {
   id: string;
   createdAt: string;
@@ -20,54 +16,19 @@ export interface TelemetryRecord {
   apiKey?: string;
 }
 
-const TELEMETRY_FILE = path.join(os.tmpdir(), "prorouter-telemetry-v3.json");
-
 // Current active date helpers
 const now = new Date();
 const todayISO = now.toISOString();
 const todayDateStr = todayISO.slice(0, 10);
-
-// Genuine Real-time Telemetry Store (starts empty, only tracks actual live API requests)
-const INITIAL_DATABASE_SEED: TelemetryRecord[] = [];
 
 declare global {
   // eslint-disable-next-line no-var
   var __PRO_ROUTER_TELEMETRY__: TelemetryRecord[] | undefined;
 }
 
-function loadFileStore(): TelemetryRecord[] | null {
-  try {
-    if (fs.existsSync(TELEMETRY_FILE)) {
-      const content = fs.readFileSync(TELEMETRY_FILE, "utf-8");
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) {
-        // Strip out any legacy seeded fake records (kimi-k3, minimax, jev, longcat, etc.)
-        const genuine = parsed.filter(
-          (r) =>
-            !r.id?.startsWith("req_kimi") &&
-            !r.id?.startsWith("req_minimax") &&
-            !r.id?.startsWith("req_glm") &&
-            !r.id?.startsWith("req_ling") &&
-            !r.id?.startsWith("req_lean") &&
-            !["kimi-k3", "minimax-m3.1-flash", "jev-1.13", "longcat-2.5-preview", "nemotron-3.5-lightning", "nemotron-3.5-super-vl", "ling-3.1-flash", "leanstral-1-5", "grok", "gemini-pro", "claude-sonnet", "mimo-v2.6-flash", "beam"].includes(r.model)
-        );
-        return genuine;
-      }
-    }
-  } catch { }
-  return null;
-}
-
-function saveFileStore(records: TelemetryRecord[]) {
-  try {
-    fs.writeFileSync(TELEMETRY_FILE, JSON.stringify(records.slice(0, 500)), "utf-8");
-  } catch { }
-}
-
 function getStore(): TelemetryRecord[] {
   if (!globalThis.__PRO_ROUTER_TELEMETRY__) {
-    const fromFile = loadFileStore();
-    globalThis.__PRO_ROUTER_TELEMETRY__ = fromFile || [...INITIAL_DATABASE_SEED];
+    globalThis.__PRO_ROUTER_TELEMETRY__ = [];
   }
   return globalThis.__PRO_ROUTER_TELEMETRY__;
 }
@@ -105,7 +66,6 @@ export function recordTelemetryRequest(data: {
   };
 
   store.unshift(record); // Prepend to beginning of list
-  saveFileStore(store);
   return record;
 }
 

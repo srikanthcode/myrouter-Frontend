@@ -385,9 +385,12 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       const timeFilter = url.searchParams.get("time") || "This month";
       const modelFilter = url.searchParams.get("model") || "By Model";
       const stats = getTelemetryOverview(timeFilter, modelFilter);
+      const wallet = walletFor(auth.user.id);
 
       return NextResponse.json({
         ...stats,
+        balancePaise: wallet.balancePaise,
+        balanceFormatted: `₹${(wallet.balancePaise / 100).toFixed(2)}`,
         activeKeys: 0,
         freeUsed: 0,
         plan: {

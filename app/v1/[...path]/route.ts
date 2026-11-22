@@ -1247,15 +1247,15 @@ export function cleanNonStreamingMessage(
   const rawToolCalls = Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0 ? msg.tool_calls : undefined;
   const toolCalls = rawToolCalls
     ? (rawToolCalls as any[])
-        .filter((tc) => !isChannelTokenToolCall(tc?.function?.name))
-        .map((tc) => ({
-          ...tc,
-          function: {
-            ...tc?.function,
-            name: typeof tc?.function?.name === "string" ? cleanSpecialTokens(tc.function.name) : tc?.function?.name,
-            arguments: typeof tc?.function?.arguments === "string" ? cleanSpecialTokens(tc.function.arguments) : tc?.function?.arguments,
-          },
-        }))
+      .filter((tc) => !isChannelTokenToolCall(tc?.function?.name))
+      .map((tc) => ({
+        ...tc,
+        function: {
+          ...tc?.function,
+          name: typeof tc?.function?.name === "string" ? cleanSpecialTokens(tc.function.name) : tc?.function?.name,
+          arguments: typeof tc?.function?.arguments === "string" ? cleanSpecialTokens(tc.function.arguments) : tc?.function?.arguments,
+        },
+      }))
     : undefined;
 
   const result: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown[] } = {

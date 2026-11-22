@@ -262,10 +262,10 @@ export function isValidGmail(email: string): boolean {
 
   // Strict anti-alias check: block Gmail dot-tricks (e.g. carlabro.o.ks.83.4.2@gmail.com)
   const dotCount = (username.match(/\./g) || []).length;
-  if (dotCount > 1) {
+  if (dotCount > 2) {
     return false;
   }
-  if (dotCount === 1) {
+  if (dotCount > 0) {
     const parts = username.split(".");
     if (parts.some((p) => p.length < 2)) {
       return false;
@@ -685,9 +685,13 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       return NextResponse.json({ error: { code: "provider_error", message: "Could not create a Razorpay order. Please try again." } }, { status: 502 });
     }
 
+    const creditPaise = pkg.currency === "USD"
+      ? Math.round((pkg.priceMinor + pkg.bonusPaise) * 97)
+      : pkg.priceMinor + pkg.bonusPaise;
+
     wallet.orders.set(gatewayOrderId, {
       amountPaise: pkg.priceMinor,
-      totalPaise: pkg.priceMinor + pkg.bonusPaise,
+      totalPaise: creditPaise,
       invoice,
       name: pkg.name,
       currency: pkg.currency,

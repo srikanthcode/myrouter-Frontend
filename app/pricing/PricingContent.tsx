@@ -87,6 +87,54 @@ export function PricingContent({
         </p>
       </div>
 
+      {/* ── Daily Free-Token Entitlement Highlight ── */}
+      <section className="mb-10">
+        <div className="rounded-2xl border border-accent/40 bg-accent/[0.03] p-6 sm:p-7 backdrop-blur-xs">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex size-7 items-center justify-center rounded-lg border border-accent/30 bg-accent/10">
+                  <Sparkles className="size-4 text-accent" strokeWidth={1.75} />
+                </span>
+                <span className="font-mono text-xs font-semibold uppercase tracking-wider text-accent">
+                  Permanent Free Tier
+                </span>
+                <Badge tone="good">100% Free · No Card Required</Badge>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-fg">
+                1,000,000 Free Tokens Every Day
+              </h2>
+              <p className="text-[13.5px] text-mut max-w-2xl leading-relaxed">
+                Every registered developer gets 1,000,000 free tokens every single day shared across DeepSeek V4.1 Flash and Qwen 27B. Allowance resets automatically at 00:00 UTC. Seamlessly spills over to paid wallet balance when exceeded with zero request interruption.
+              </p>
+              <div className="flex flex-wrap items-center gap-4 pt-1 font-mono text-xs text-mut2">
+                <div className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-good" />
+                  <span>DeepSeek V4.1 Flash</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-good" />
+                  <span>Qwen 27B</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-accent" />
+                  <span>Resets Daily (00:00 UTC)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
+              <Link href="/signup" className={linkButtonPrimary}>
+                Get 1M Free Tokens
+              </Link>
+              <Link href="/models" className={linkButtonSecondary}>
+                View Model Catalog
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Subscription Plans */}
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-4">

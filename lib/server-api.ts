@@ -309,8 +309,8 @@ export const DEFAULT_PLANS_USD: PlanSummary[] = [
     concurrency: 2,
     queuePriority: 10,
     features: [
-      "Access to all 480+ AI models",
-      "Free daily quota on all models",
+      "Access to all 500+ AI models",
+      "1,000,000 free tokens/day (DeepSeek V4.1 & Qwen 27B)",
       "Standard queue priority",
       "Streaming SSE responses",
       "OpenAI SDK compatible endpoint",
@@ -381,8 +381,8 @@ export const DEFAULT_PLANS: PlanSummary[] = [
     concurrency: 2,
     queuePriority: 10,
     features: [
-      "Access to all 21+ models",
-      "Free daily quota on all models",
+      "Access to all 500+ AI models",
+      "1,000,000 free tokens/day (DeepSeek V4.1 & Qwen 27B)",
       "Standard queue priority",
       "Streaming SSE responses",
       "OpenAI SDK compatible endpoint",

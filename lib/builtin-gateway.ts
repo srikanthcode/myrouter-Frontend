@@ -325,7 +325,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     return NextResponse.json({
       user: auth.user,
       balancePaise: wallet.balancePaise,
-      plan: { slug: "free", name: "Free Tier", pricePaise: 0, freeRpm: 20, queuePriority: 1 },
+      plan: { slug: "free", name: "Free Tier", pricePaise: 0, freeRpm: 1, queuePriority: 5 },
       astra: astraState(wallet),
     });
   }
@@ -396,8 +396,8 @@ export async function handleFallback(req: NextRequest, path: string[]) {
         plan: {
           slug: "free",
           name: "Free Tier",
-          freeRpm: 20,
-          queuePriority: 1,
+          freeRpm: 1,
+          queuePriority: 5,
         },
         queue: [],
       });
@@ -787,14 +787,14 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     return NextResponse.json({
       available: true,
       campaign: {
-        name: "Astra Launch Offer",
-        originalPricePaise: 299900,
-        originalPriceFormatted: "₹2,999",
-        discountPercent: 50,
-        promoPricePaise: 149900,
-        promoPriceFormatted: "₹1,499",
-        trialDays: 30,
-        endsAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+        name: "Astra 7-Day Access",
+        originalPricePaise: 400000,
+        originalPriceFormatted: "₹4,000",
+        discountPercent: 80,
+        promoPricePaise: 80000,
+        promoPriceFormatted: "₹800",
+        trialDays: 7,
+        endsAt: null,
         active: true,
       },
       entitlement: astra.active ? { activatedAt: new Date().toISOString(), expiresAt: astra.expiresAt, daysLeft: astra.daysLeft } : null,
@@ -810,7 +810,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       sharePath: "/signup?ref=ASTRA-PRO",
       successfulRedemptions: 0,
       activeAstraUsers: 0,
-      trialDays: 30,
+      trialDays: 7,
     });
   }
 
@@ -831,7 +831,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     }
     wallet.redeemedPromos.add(code);
     wallet.balancePaise += 5000;
-    wallet.astraExpiresAt = Date.now() + 30 * 86400000;
+    wallet.astraExpiresAt = Date.now() + 7 * 86400000;
     wallet.transactions.unshift({
       id: "tx_promo_" + code + "_" + Date.now(),
       type: "promo",
@@ -846,62 +846,61 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       entitlement: {
         activatedAt: new Date().toISOString(),
         expiresAt: new Date(wallet.astraExpiresAt).toISOString(),
-        daysLeft: 30,
+        daysLeft: 7,
       },
       message: "Astra access activated.",
     });
   }
-  // ── 48-Hour Promotional Launch Special (§Phase 4) ──
-  if (subpath === "/promotions/launch-48h") {
+  // ── Permanent Daily Free-Token Entitlement (§Phase 5) ──
+  if (subpath === "/promotions/daily-entitlement" || subpath === "/promotions/launch-48h" || subpath === "/promotions/status") {
     const user = parseSessionCookie(req);
     const userId = user?.id || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "guest-session";
-    const storedStart = globalPromoActivations.get(userId);
-    const now = Date.now();
-    const duration = 48 * 3600 * 1000;
-    const activated = Boolean(storedStart);
-    const expiresAt = storedStart ? storedStart + duration : null;
-    const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
-    const active = Boolean(expiresAt && remainingMs > 0);
+    const now = new Date();
+    const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+    const remainingMs = Math.max(0, nextReset.getTime() - now.getTime());
     const hours = Math.floor(remainingMs / (1000 * 60 * 60));
     const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    const dailyLimit = 1_000_000;
 
     return NextResponse.json({
-      campaign: "launch-48h-special",
-      name: "Launch Special: 48 Hours Free",
+      campaign: "daily-free-entitlement",
+      name: "Daily Free Token Entitlement",
       eligibleModels: ["deepseek-v4.1-flash", "qwen3.8-27b"],
-      durationHours: 48,
-      activated,
-      active,
+      activated: true,
+      active: true,
+      dailyAllowanceTokens: dailyLimit,
+      tokensConsumedToday: 0,
+      tokensRemainingToday: dailyLimit,
       remainingMs,
-      remainingFormatted: active ? `${hours}h ${mins}m left` : (activated ? "Expired" : "Not activated"),
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      remainingFormatted: `${dailyLimit.toLocaleString()} free tokens available · Resets in ${hours}h ${mins}m`,
+      nextResetAt: nextReset.toISOString(),
+      expiresAt: nextReset.toISOString(),
+      quota: {
+        maxTokensPerDay: dailyLimit,
+        tokensConsumed: 0,
+        tokensRemaining: dailyLimit,
+        quotaExceeded: false,
+      },
     });
   }
 
-  if (subpath === "/promotions/launch-48h/activate" && method === "POST") {
-    const user = parseSessionCookie(req);
-    const userId = user?.id || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "guest-session";
-    const duration = 48 * 3600 * 1000;
-    let storedStart = globalPromoActivations.get(userId);
-    let alreadyActivated = true;
-    if (!storedStart) {
-      storedStart = Date.now();
-      globalPromoActivations.set(userId, storedStart);
-      alreadyActivated = false;
-    }
-    const expiresAt = storedStart + duration;
-    const remainingMs = Math.max(0, expiresAt - Date.now());
-    const active = remainingMs > 0;
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  if ((subpath === "/promotions/daily-entitlement/activate" || subpath === "/promotions/launch-48h/activate" || subpath === "/promotions/activate") && method === "POST") {
+    const now = new Date();
+    const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+    const dailyLimit = 1_000_000;
 
     return NextResponse.json({
       ok: true,
-      alreadyActivated,
-      active,
-      remainingMs,
-      remainingFormatted: `${hours}h ${mins}m left`,
-      expiresAt: new Date(expiresAt).toISOString(),
+      alreadyActivated: true,
+      active: true,
+      dailyAllowanceTokens: dailyLimit,
+      tokensConsumedToday: 0,
+      tokensRemainingToday: dailyLimit,
+      remainingMs: Math.max(0, nextReset.getTime() - now.getTime()),
+      remainingFormatted: `${dailyLimit.toLocaleString()} free tokens available`,
+      nextResetAt: nextReset.toISOString(),
+      expiresAt: nextReset.toISOString(),
+      eligibleModels: ["deepseek-v4.1-flash", "qwen3.8-27b"],
     });
   }
 

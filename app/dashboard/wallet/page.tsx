@@ -1,7 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, CreditCard, History, Package, Receipt, ShieldCheck, Wallet } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Download,
+  History,
+  Package,
+  Printer,
+  Receipt,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
+  X,
+} from "lucide-react";
 import { ApiError, api, cx, formatINR, timeAgo } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, Modal, Skeleton, useToast } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
@@ -44,6 +59,29 @@ interface Payment {
   createdAt: string;
 }
 
+interface DailyEntitlement {
+  campaign: string;
+  eligibleModels: string[];
+  active: boolean;
+  dailyAllowanceTokens: number;
+  tokensConsumedToday: number;
+  tokensRemainingToday: number;
+  nextResetAt: string;
+  remainingFormatted: string;
+}
+
+interface PaymentReceipt {
+  invoice: string;
+  paymentId: string;
+  orderId?: string;
+  packageName: string;
+  amountFormatted: string;
+  creditsFormatted: string;
+  currency: string;
+  date: string;
+  userEmail: string;
+}
+
 const txTone: Record<string, "good" | "bad" | "neutral" | "accent"> = {
   topup: "good",
   refund: "good",
@@ -75,58 +113,47 @@ function loadRazorpayScript(): Promise<boolean> {
 
 const DEFAULT_WALLET_PACKAGES: PackageItem[] = [
   {
-    id: "pkg_starter",
-    slug: "starter",
-    name: "Starter Package ($5)",
-    pricePaise: 40000,
-    priceFormatted: "₹400 ($5)",
+    id: "pkg-starter-100",
+    slug: "starter-100",
+    name: "Starter Pack",
+    pricePaise: 10000,
+    priceFormatted: "₹100",
     bonusPaise: 0,
-    totalPaise: 40000,
-    totalFormatted: "₹400",
+    totalPaise: 10000,
+    totalFormatted: "₹100",
     currency: "INR",
   },
   {
-    id: "pkg_basic",
-    slug: "basic",
-    name: "Basic Package ($10)",
-    pricePaise: 80000,
-    priceFormatted: "₹800 ($10)",
-    bonusPaise: 0,
-    totalPaise: 80000,
-    totalFormatted: "₹800",
+    id: "pkg-pro-500",
+    slug: "pro-500",
+    name: "Pro Pack",
+    pricePaise: 50000,
+    priceFormatted: "₹500",
+    bonusPaise: 5000,
+    totalPaise: 55000,
+    totalFormatted: "₹550",
     currency: "INR",
   },
   {
-    id: "pkg_growth",
-    slug: "growth",
-    name: "Growth Package ($25)",
-    pricePaise: 200000,
-    priceFormatted: "₹2,000 ($25)",
-    bonusPaise: 0,
-    totalPaise: 200000,
-    totalFormatted: "₹2,000",
+    id: "pkg-scale-1000",
+    slug: "scale-1000",
+    name: "Scale Pack",
+    pricePaise: 100000,
+    priceFormatted: "₹1,000",
+    bonusPaise: 20000,
+    totalPaise: 120000,
+    totalFormatted: "₹1,200",
     currency: "INR",
   },
   {
-    id: "pkg_pro",
-    slug: "pro",
-    name: "Pro Package ($50)",
-    pricePaise: 400000,
-    priceFormatted: "₹4,000 ($50)",
-    bonusPaise: 0,
-    totalPaise: 400000,
-    totalFormatted: "₹4,000",
-    currency: "INR",
-  },
-  {
-    id: "pkg_business",
-    slug: "business",
-    name: "Business Package ($100)",
-    pricePaise: 800000,
-    priceFormatted: "₹8,000 ($100)",
-    bonusPaise: 0,
-    totalPaise: 800000,
-    totalFormatted: "₹8,000",
+    id: "pkg-power-2500",
+    slug: "power-2500",
+    name: "Power Pack",
+    pricePaise: 250000,
+    priceFormatted: "₹2,500",
+    bonusPaise: 65000,
+    totalPaise: 315000,
+    totalFormatted: "₹3,150",
     currency: "INR",
   },
 ];
@@ -206,13 +233,14 @@ export default function WalletPage() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [packages, setPackages] = useState<PackageItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [dailyQuota, setDailyQuota] = useState<DailyEntitlement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [buying, setBuying] = useState<PackageItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   type CheckoutState = "IDLE" | "INITIALIZING" | "CHECKOUT_OPEN" | "VERIFYING" | "PAYMENT_CONFIRMED" | "FAILED" | "CANCELLED";
   const [checkoutState, setCheckoutState] = useState<CheckoutState>("IDLE");
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
 
   // Preload Razorpay SDK once on component mount
   useEffect(() => {
@@ -233,10 +261,11 @@ export default function WalletPage() {
 
   const load = useCallback(async () => {
     try {
-      const [w, p, pay] = await Promise.all([
+      const [w, p, pay, dq] = await Promise.all([
         api<WalletData>("/wallet"),
         api<{ items: PackageItem[] }>("/wallet/packages"),
         api<{ items: Payment[] }>("/payments"),
+        api<DailyEntitlement>("/promotions/daily-entitlement").catch(() => null),
       ]);
 
       if (w) {
@@ -255,6 +284,10 @@ export default function WalletPage() {
       const fallbackP = currency === "USD" ? DEFAULT_WALLET_PACKAGES_USD : DEFAULT_WALLET_PACKAGES;
       const items = Array.isArray(p?.items) && p.items.length > 0 && p.items[0]?.currency === currency ? p.items : fallbackP;
       setPackages(items);
+
+      if (dq) {
+        setDailyQuota(dq);
+      }
 
       const rawPayments = Array.isArray(pay?.items) ? pay.items : Array.isArray(pay) ? (pay as unknown as Payment[]) : [];
       const seenPay = new Set<string>();
@@ -342,9 +375,8 @@ export default function WalletPage() {
             });
             setCheckoutState("PAYMENT_CONFIRMED");
             toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
-            setBuying(null);
 
-            // Optimistically add the captured payment immediately to the board
+            // Optimistically add the captured payment immediately to the list
             const newPaymentRow: Payment = {
               id: res.paymentId || response.razorpay_payment_id,
               invoice: res.invoice,
@@ -376,6 +408,19 @@ export default function WalletPage() {
                 balanceFormatted: formatINR(updatedBal),
                 transactions: [newTx, ...prev.transactions.filter((t) => t.id !== newTx.id)],
               };
+            });
+
+            // Set verified receipt modal
+            setReceipt({
+              invoice: res.invoice,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              packageName: pkg.name,
+              amountFormatted: pkg.priceFormatted,
+              creditsFormatted: pkg.totalFormatted || pkg.priceFormatted,
+              currency: res.currency || pkg.currency || currency,
+              date: new Date().toLocaleString(),
+              userEmail: me?.user?.email ?? "",
             });
 
             await load();
@@ -437,35 +482,75 @@ export default function WalletPage() {
   if (error) return <div className="rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad" role="alert">{error}</div>;
   if (!wallet) return <div className="space-y-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 w-full" />)}</div>;
 
+  const quotaTotal = dailyQuota?.dailyAllowanceTokens || 1000000;
+  const quotaRemaining = dailyQuota?.tokensRemainingToday ?? 1000000;
+  const quotaConsumed = dailyQuota?.tokensConsumedToday ?? 0;
+  const quotaPct = Math.min(100, Math.round((quotaConsumed / quotaTotal) * 100));
+
   return (
     <div className="fade-up space-y-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Wallet & Billing</h1>
-        <p className="mt-1 text-[13.5px] text-mut">Prepaid balance in INR. Paid-model inference is deducted per request; free models cost nothing.</p>
+        <p className="mt-1 text-[13.5px] text-mut">Authoritative balance & daily token entitlements. Paid inference is billed per request; free tokens reset daily.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="p-5 sm:col-span-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11.5px] uppercase tracking-wide text-mut2">Available balance</div>
-            <Wallet className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
-          </div>
-          <div className="mt-2 font-mono text-3xl font-semibold tabular-nums text-good">{wallet.balanceFormatted}</div>
-          <div className="mt-1 text-[12.5px] text-mut2">{wallet.currency} · prepaid, never expires</div>
-        </Card>
+      {/* Primary Metrics Grid */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Available Paid Balance */}
         <Card className="p-5">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[11.5px] uppercase tracking-wide text-mut2">Credited (recent)</div>
+            <div className="text-[11px] uppercase tracking-wide text-mut2 font-medium">Available balance</div>
+            <Wallet className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
+          </div>
+          <div className="mt-2 font-mono text-2xl sm:text-3xl font-semibold tabular-nums text-good">{wallet.balanceFormatted}</div>
+          <div className="mt-1 text-[12px] text-mut2">{wallet.currency} · prepaid, never expires</div>
+        </Card>
+
+        {/* Daily Free Allowance */}
+        <Card className="p-5 border-accent/30 bg-accent/[0.02]">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wide text-accent font-medium flex items-center gap-1">
+              <Sparkles className="size-3" />
+              <span>Daily Free Tokens</span>
+            </div>
+            <Clock className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
+          </div>
+          <div className="mt-2 font-mono text-xl sm:text-2xl font-semibold tabular-nums text-fg">
+            {(quotaRemaining).toLocaleString()}
+          </div>
+          <div className="mt-1 text-[11.5px] text-mut flex items-center justify-between">
+            <span>of {quotaTotal.toLocaleString()} free/day</span>
+            <span className="font-mono text-accent text-[11px]">{100 - quotaPct}% left</span>
+          </div>
+          <div className="mt-2 w-full h-1.5 bg-line rounded-full overflow-hidden">
+            <div
+              className="h-full bg-accent transition-all duration-300"
+              style={{ width: `${Math.max(3, 100 - quotaPct)}%` }}
+            />
+          </div>
+          <div className="mt-1.5 text-[10.5px] text-mut2 font-mono">
+            DeepSeek V4.1 & Qwen 27B · Resets 00:00 UTC
+          </div>
+        </Card>
+
+        {/* Credited Recent */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wide text-mut2 font-medium">Credited (recent)</div>
             <ArrowDownToLine className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="mt-2 font-mono text-xl font-semibold tabular-nums text-good">{formatINR(credits)}</div>
+          <div className="mt-1 text-[12px] text-mut2">Top-ups and promo gifts</div>
         </Card>
+
+        {/* Spent Recent */}
         <Card className="p-5">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[11.5px] uppercase tracking-wide text-mut2">Spent (recent)</div>
+            <div className="text-[11px] uppercase tracking-wide text-mut2 font-medium">Spent (recent)</div>
             <ArrowUpFromLine className="size-3.5 shrink-0 text-mut2" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="mt-2 font-mono text-xl font-semibold tabular-nums text-bad">{formatINR(debits)}</div>
+          <div className="mt-1 text-[12px] text-mut2">Paid inference consumption</div>
         </Card>
       </div>
 
@@ -526,24 +611,24 @@ export default function WalletPage() {
               <Card
                 key={p.slug}
                 className={cx(
-                  "flex flex-col p-5 transition-colors duration-200",
-                  buying?.slug === p.slug ? "border-accent/60" : "hover:border-line2",
+                  "flex flex-col p-5 transition-colors duration-200 border-line hover:border-line2",
+                  activeSlug === p.slug && "border-accent/60"
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-[15px] font-semibold">{p.name}</h3>
                   {p.bonusPaise > 0 && <Badge tone="accent">Bonus</Badge>}
                 </div>
-                <div className="mt-2 font-mono text-xl font-semibold tabular-nums">{p.priceFormatted}</div>
+                <div className="mt-2 font-mono text-2xl font-semibold tabular-nums">{p.priceFormatted}</div>
                 <div className="mt-1 flex-1 text-[12.5px]">
                   {p.bonusPaise > 0 ? (
                     <span className="text-good font-medium">+{formatINR(p.bonusPaise)} bonus · {p.totalFormatted} total</span>
                   ) : (
-                    <span className="text-mut2">No bonus credit</span>
+                    <span className="text-mut2">Standard balance</span>
                   )}
                 </div>
                 <Button
-                  className="mt-4"
+                  className="mt-4 w-full"
                   size="sm"
                   disabled={busy && activeSlug !== p.slug}
                   loading={busy && activeSlug === p.slug}
@@ -569,7 +654,7 @@ export default function WalletPage() {
       <Card>
         <div className="border-b border-line px-5 py-3.5">
           <h2 className="text-sm font-semibold">Transaction ledger</h2>
-          <p className="mt-0.5 text-[12.5px] text-mut">Append-only. Every balance change is a new row — nothing is edited in place.</p>
+          <p className="mt-0.5 text-[12.5px] text-mut">Append-only. Every balance change is an immutable ledger entry.</p>
         </div>
         {wallet.transactions.length === 0 ? (
           <div className="p-5">
@@ -643,51 +728,68 @@ export default function WalletPage() {
         )}
       </Card>
 
-      <Modal open={!!buying} onClose={() => !busy && setBuying(null)} title="Confirm Top-Up">
-        {buying && (
+      {/* Verified Receipt Modal */}
+      <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Payment Receipt">
+        {receipt && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-line bg-ink2/60 p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-[14px] font-semibold text-fg">{buying.name}</h4>
-                  <p className="mt-0.5 text-[12px] text-mut">ProRouter API Balance</p>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-lg font-bold text-fg">{buying.priceFormatted}</div>
-                  {buying.bonusPaise > 0 && (
-                    <div className="font-mono text-[11px] text-good">+{formatINR(buying.bonusPaise)} Bonus</div>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2.5 text-[12px]">
-                <span className="text-mut">Total Credits Received:</span>
-                <span className="font-mono font-semibold text-good">{buying.totalFormatted}</span>
+            <div className="flex items-center gap-2 rounded-lg border border-good/30 bg-good/10 p-3 text-good text-sm">
+              <CheckCircle2 className="size-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Payment Confirmed & Verified</p>
+                <p className="text-[12px] text-good/80">Funds added instantly to your ProRouter account balance.</p>
               </div>
             </div>
 
-            {/* Payment Method Badges */}
-            <div className="rounded-lg border border-line bg-panel2/40 p-3.5 text-[11.5px] space-y-2">
-              <div className="flex items-center gap-2 font-medium text-fg">
-                <ShieldCheck className="size-4 text-good" />
-                <span>Secured by Razorpay ({buying.currency || currency})</span>
+            <div className="rounded-xl border border-line bg-panel2/60 p-4 font-mono text-xs space-y-2.5">
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Invoice #:</span>
+                <span className="font-bold text-fg">{receipt.invoice}</span>
               </div>
-              <p className="text-mut text-[11.5px] leading-relaxed">
-                {buying.currency === "USD" || currency === "USD"
-                  ? "Supports Global Credit/Debit Cards (Visa, Mastercard, American Express) & PayPal with instant Razorpay checkout."
-                  : "Supports all Indian payment methods: UPI (Google Pay, PhonePe, Paytm, BHIM), Cards (Visa, Mastercard, RuPay), and NetBanking."}
-              </p>
-              <div className="flex items-center gap-2 pt-1 text-[11px] text-mut2">
-                <CreditCard className="size-3.5" />
-                <span>Instant 256-bit encrypted checkout · No hidden charges</span>
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Razorpay Payment ID:</span>
+                <span className="text-fg">{receipt.paymentId}</span>
+              </div>
+              {receipt.orderId && (
+                <div className="flex justify-between border-b border-line/60 pb-2">
+                  <span className="text-mut">Gateway Order ID:</span>
+                  <span className="text-fg">{receipt.orderId}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Item:</span>
+                <span className="text-fg">{receipt.packageName}</span>
+              </div>
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Amount Paid:</span>
+                <span className="font-bold text-fg">{receipt.amountFormatted}</span>
+              </div>
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Credits Added:</span>
+                <span className="font-bold text-good">{receipt.creditsFormatted}</span>
+              </div>
+              <div className="flex justify-between border-b border-line/60 pb-2">
+                <span className="text-mut">Date & Time:</span>
+                <span className="text-fg">{receipt.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-mut">Account:</span>
+                <span className="text-fg">{receipt.userEmail}</span>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" disabled={busy} onClick={() => setBuying(null)}>
-                Cancel
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (typeof window !== "undefined") window.print();
+                }}
+              >
+                <Printer className="size-3.5 mr-1.5" />
+                Print Receipt
               </Button>
-              <Button loading={busy} onClick={() => void checkout(buying)}>
-                Pay {buying.priceFormatted}
+              <Button size="sm" onClick={() => setReceipt(null)}>
+                Done
               </Button>
             </div>
           </div>

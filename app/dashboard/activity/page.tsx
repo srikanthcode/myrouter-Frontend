@@ -44,110 +44,7 @@ interface ActivityItem {
 const PAGE = 25;
 
 const linkButtonPrimary =
-  "inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-accent-ink transition-all duration-200 hover:bg-accent2 hover:shadow-[0_0_15px_rgba(34,197,94,0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-
-const SAMPLE_ACTIVITY: ActivityItem[] = [
-  {
-    id: "req_live_89a7f31c",
-    createdAt: new Date(Date.now() - 45 * 1000).toISOString(),
-    model: "deepseek-v4.1-flash",
-    modelName: "DeepSeek V4.1 Flash",
-    provider: "deepseek",
-    status: "success",
-    httpStatus: 200,
-    inputTokens: 384,
-    outputTokens: 142,
-    totalTokens: 526,
-    latencyMs: 182,
-    ttftMs: 64,
-    costPaise: 0,
-    isFree: true,
-    streaming: true,
-    errorCode: null,
-    route: "tokenjuice-primary",
-    queueWaitMs: 8,
-  },
-  {
-    id: "req_live_76b4d29e",
-    createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-    model: "qwen3.8-27b",
-    modelName: "Qwen 3.8 27B",
-    provider: "alibaba",
-    status: "success",
-    httpStatus: 200,
-    inputTokens: 512,
-    outputTokens: 260,
-    totalTokens: 772,
-    latencyMs: 245,
-    ttftMs: 82,
-    costPaise: 0,
-    isFree: true,
-    streaming: true,
-    errorCode: null,
-    route: "tokenjuice-primary",
-    queueWaitMs: 12,
-  },
-  {
-    id: "req_live_55c911a0",
-    createdAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-    model: "qwen-2.5-coder-32b",
-    modelName: "Qwen 2.5 Coder 32B",
-    provider: "alibaba",
-    status: "success",
-    httpStatus: 200,
-    inputTokens: 1240,
-    outputTokens: 680,
-    totalTokens: 1920,
-    latencyMs: 310,
-    ttftMs: 95,
-    costPaise: 0,
-    isFree: true,
-    streaming: false,
-    errorCode: null,
-    route: "tokenjuice-primary",
-    queueWaitMs: 14,
-  },
-  {
-    id: "req_live_33f208c1",
-    createdAt: new Date(Date.now() - 28 * 60 * 1000).toISOString(),
-    model: "claude-3-5-sonnet",
-    modelName: "Claude 3.5 Sonnet",
-    provider: "anthropic",
-    status: "success",
-    httpStatus: 200,
-    inputTokens: 640,
-    outputTokens: 310,
-    totalTokens: 950,
-    latencyMs: 412,
-    ttftMs: 140,
-    costPaise: 85,
-    isFree: false,
-    streaming: true,
-    errorCode: null,
-    route: "pro-intelligent-router",
-    queueWaitMs: 18,
-  },
-  {
-    id: "req_live_11e004b2",
-    createdAt: new Date(Date.now() - 54 * 60 * 1000).toISOString(),
-    model: "gpt-4o",
-    modelName: "GPT-4o",
-    provider: "openai",
-    status: "success",
-    httpStatus: 200,
-    inputTokens: 420,
-    outputTokens: 180,
-    totalTokens: 600,
-    latencyMs: 290,
-    ttftMs: 110,
-    costPaise: 60,
-    isFree: false,
-    streaming: true,
-    errorCode: null,
-    route: "pro-intelligent-router",
-    queueWaitMs: 11,
-  },
-];
+  "inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-accent-ink transition-all duration-200 hover:bg-accent2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export default function ActivityPage() {
   const { refresh } = useSession();
@@ -158,7 +55,6 @@ export default function ActivityPage() {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [showDemo, setShowDemo] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
@@ -202,7 +98,7 @@ export default function ActivityPage() {
   const page = Math.floor(offset / PAGE) + 1;
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
-  const displayItems = showDemo ? SAMPLE_ACTIVITY : items;
+  const displayItems = items;
   const hasRealData = items && items.length > 0;
 
   return (
@@ -245,13 +141,12 @@ export default function ActivityPage() {
               onClick={() => {
                 setStatus(k);
                 setOffset(0);
-                setShowDemo(false);
               }}
-              aria-pressed={status === k && !showDemo}
+              aria-pressed={status === k}
               className={cx(
                 "h-8 cursor-pointer rounded-lg border px-3 text-[12.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                status === k && !showDemo
-                  ? "border-accent/40 bg-accent/10 text-accent shadow-[0_0_10px_rgba(34,197,94,0.15)]"
+                status === k
+                  ? "border-accent/40 bg-accent/10 text-accent"
                   : "border-line text-mut hover:border-line2 hover:text-fg"
               )}
             >
@@ -287,37 +182,20 @@ export default function ActivityPage() {
             <Activity className="size-3.5 text-accent" />
           </div>
           <div className="mt-1 font-mono text-lg font-semibold text-fg">
-            {(showDemo ? 5 : total).toLocaleString("en-IN")}
+            {total.toLocaleString("en-IN")}
           </div>
           <div className="text-[11px] text-mut">Telemetry events</div>
         </Card>
 
         <Card className="card-hover-lift p-3.5">
           <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-mut2">
-            <span>Launch Special</span>
-            <Sparkles className="size-3.5 text-accent animate-pulse" />
+            <span>Daily Free Quota</span>
+            <Sparkles className="size-3.5 text-accent" />
           </div>
-          <div className="mt-1 font-mono text-lg font-semibold text-good">48h Free</div>
-          <div className="text-[11px] text-mut2">DeepSeek & Qwen free</div>
+          <div className="mt-1 font-mono text-lg font-semibold text-good">1M Tokens</div>
+          <div className="text-[11px] text-mut2">DeepSeek & Qwen 27B</div>
         </Card>
       </div>
-
-      {/* Demo Banner Notification */}
-      {showDemo && (
-        <div className="flex items-center justify-between rounded-xl border border-accent/30 bg-gradient-to-r from-accent/15 via-accent/5 to-transparent px-4 py-3 text-[12.5px] text-accent">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-4 animate-spin text-accent" />
-            <span>Viewing simulated production activity preview with tokens, TTFT, and routing inspector.</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowDemo(false)}
-            className="cursor-pointer font-medium underline opacity-90 hover:opacity-100"
-          >
-            Show my live data
-          </button>
-        </div>
-      )}
 
       {error && (
         <div className="rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad" role="alert">
@@ -362,14 +240,6 @@ export default function ActivityPage() {
               <Zap className="size-3.5" />
               Launch Playground
             </Link>
-            <button
-              type="button"
-              onClick={() => setShowDemo(true)}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3.5 text-[13px] font-medium text-accent transition-all duration-200 hover:border-accent hover:bg-accent/20 hover:shadow-[0_0_12px_rgba(34,197,94,0.25)]"
-            >
-              <Sparkles className="size-3.5" />
-              Preview Sample Activity
-            </button>
           </div>
         </div>
       ) : (
@@ -495,7 +365,7 @@ export default function ActivityPage() {
           </Card>
 
           {/* Pagination */}
-          {!showDemo && (
+          {total > PAGE && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-mut">
               <span className="tabular-nums">
                 Page {page} of {pages} · {total.toLocaleString()} request{total === 1 ? "" : "s"}

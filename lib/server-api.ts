@@ -267,6 +267,28 @@ export const DEFAULT_PACKAGES_USD: PackageSummary[] = [
     totalFormatted: "$65.00",
     currency: "USD",
   },
+  {
+    id: "pkg-builder-usd",
+    slug: "builder-usd",
+    name: "Builder",
+    pricePaise: 1200,
+    priceFormatted: "$12.00",
+    bonusPaise: 100,
+    totalPaise: 1300,
+    totalFormatted: "$13.00",
+    currency: "USD",
+  },
+  {
+    id: "pkg-pro-usd",
+    slug: "pro-usd",
+    name: "Pro Plus",
+    pricePaise: 2900,
+    priceFormatted: "$29.00",
+    bonusPaise: 300,
+    totalPaise: 3200,
+    totalFormatted: "$32.00",
+    currency: "USD",
+  },
 ];
 
 export const DEFAULT_PACKAGES = DEFAULT_PACKAGES_INR;

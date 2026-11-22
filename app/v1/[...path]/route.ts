@@ -264,7 +264,7 @@ export interface ModelEntry {
 import { ALL_MODELS_500 } from "@/lib/model-profiles-data";
 
 export const ALL_MODELS: ModelEntry[] = [
-  // ── 0. 48-Hour Promotional Free Frontier Models ──
+  // ── 0. Permanent Daily Free Entitlement Models (1M Free Tokens / Day) ──
   {
     id: "deepseek-v4.1-flash",
     name: "DeepSeek V4.1 Flash",
@@ -273,8 +273,8 @@ export const ALL_MODELS: ModelEntry[] = [
     owned_by: "DeepSeek",
     category: "Reasoning and Frontier",
     tier: "Frontier",
-    description: "DeepSeek V4.1 Flash high-speed inference engine with 128k context. Free for 48 hours.",
-    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+    description: "DeepSeek V4.1 Flash high-speed inference engine with 128k context. Eligible for 1,000,000 daily free tokens.",
+    pricing: { input_usd_per_million: 0.30, output_usd_per_million: 1.20 },
   },
   {
     id: "deepseek-v4.1-flash-1017",
@@ -284,8 +284,8 @@ export const ALL_MODELS: ModelEntry[] = [
     owned_by: "DeepSeek",
     category: "Reasoning and Frontier",
     tier: "Frontier",
-    description: "DeepSeek V4.1 Flash 1017 build for deep reasoning and code completion. Free for 48 hours.",
-    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+    description: "DeepSeek V4.1 Flash 1017 build for deep reasoning and code completion. Eligible for 1,000,000 daily free tokens.",
+    pricing: { input_usd_per_million: 0.30, output_usd_per_million: 1.20 },
   },
   {
     id: "qwen3.8-27b",
@@ -295,8 +295,8 @@ export const ALL_MODELS: ModelEntry[] = [
     owned_by: "Alibaba Cloud",
     category: "General Intelligence",
     tier: "Frontier",
-    description: "Alibaba Cloud Qwen 3.8 27B open frontier model with 128k context. Free for 48 hours.",
-    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+    description: "Alibaba Cloud Qwen 3.8 27B open frontier model with 128k context. Eligible for 1,000,000 daily free tokens.",
+    pricing: { input_usd_per_million: 0.35, output_usd_per_million: 1.40 },
   },
   {
     id: "qwen-2.5-coder-32b",
@@ -305,9 +305,9 @@ export const ALL_MODELS: ModelEntry[] = [
     created: 1710000000,
     owned_by: "Alibaba Cloud",
     category: "Coding and Software Engineering",
-    tier: "Frontier",
-    description: "Alibaba Cloud Qwen 2.5 Coder 32B specialized coding model with 128k context. Free for 48 hours.",
-    pricing: { input_usd_per_million: 0, output_usd_per_million: 0 },
+    tier: "Coding",
+    description: "Alibaba Cloud Qwen 2.5 Coder 32B specialized coding model with 128k context.",
+    pricing: { input_usd_per_million: 0.75, output_usd_per_million: 3.00 },
   },
   ...ALL_MODELS_500,
   // ── 1. Official Pro Router Tiered Models (Routed to FreeModels Pro) ──
@@ -2682,20 +2682,20 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const clientKey = authHeader.replace(/^Bearer\s+/i, "").trim();
     const isDefaultPlaygroundKey = !clientKey || clientKey === "pro_sk_live_playground_default";
 
-    // Phase 4: Check if requested model qualifies for 48-Hour Promotional Launch Special
-    // The 4 free launch models: DeepSeek V4.1 Flash, DeepSeek V4.1 Flash 1017, Qwen 3.8 27B, Qwen 2.5 Coder 32B
-    const isPromo48hModel =
+    // Phase 5: Check if requested model qualifies for Permanent Daily Free-Token Entitlement
+    // Exactly the 2 designated models: DeepSeek V4.1 Flash & Qwen 27B (qwen3.8-27b)
+    const isDailyFreeModel =
       reqModelLower.includes("deepseek-v4.1") ||
       reqModelLower.includes("qwen3.8") ||
-      reqModelLower.includes("qwen-2.5-coder");
+      reqModelLower.includes("qwen3.2-27b");
 
     if (isDefaultPlaygroundKey) {
       const forwarded = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
       const clientIp = forwarded.split(",")[0].trim();
       const now = Date.now();
 
-      // Only promotional models bypass the 10-request guest cap during the 48-hour launch
-      if (!isPromo48hModel) {
+      // Only designated free-entitlement models bypass the 10-request guest playground cap
+      if (!isDailyFreeModel) {
         let usage = freePlaygroundIpUsage.get(clientIp);
         if (!usage || (now - usage.lastReset) > ONE_DAY_MS) {
           usage = { count: 0, lastReset: now };

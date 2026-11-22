@@ -144,22 +144,28 @@ export function inrPaiseToUsd(paise: number, usdToInrRate = DEFAULT_USD_TO_INR_D
   return Number((rupees / usdToInrRate).toFixed(4));
 }
 
-// ── Strict 48-Hour Promotional Launch Policy ──
-export const PROMOTIONAL_CANONICAL_MODELS = [
+// ── Permanent Daily Free-Token Entitlement Policy ──
+export const DAILY_FREE_ALLOWANCE_TOKENS = 1_000_000;
+export const DEFAULT_DAILY_FREE_TOKENS = DAILY_FREE_ALLOWANCE_TOKENS;
+
+export const DAILY_FREE_ELIGIBLE_MODELS = [
   "deepseek-v4.1-flash",
   "qwen3.8-27b",
 ] as const;
 
-export type PromotionalCanonicalModel = (typeof PROMOTIONAL_CANONICAL_MODELS)[number];
+export type DailyFreeEligibleModel = (typeof DAILY_FREE_ELIGIBLE_MODELS)[number];
+export const PROMOTIONAL_CANONICAL_MODELS = DAILY_FREE_ELIGIBLE_MODELS;
+export type PromotionalCanonicalModel = DailyFreeEligibleModel;
 
 export const PROMOTIONAL_48H_MODELS = new Set<string>([
   "deepseek-v4.1-flash",
   "deepseek-v4.1-flash-1017",
   "qwen3.8-27b",
   "qwen/qwen3.8-27b",
+  "qwen3.2-27b",
 ]);
 
-export function resolvePromotionalCanonicalId(identifier: string): PromotionalCanonicalModel | null {
+export function resolveDailyFreeEligibleId(identifier: string): DailyFreeEligibleModel | null {
   if (!identifier) return null;
   const clean = identifier.trim().toLowerCase();
 
@@ -187,7 +193,10 @@ export function resolvePromotionalCanonicalId(identifier: string): PromotionalCa
     clean === "qwen3.8-27b" ||
     clean === "qwen-3.8-27b" ||
     clean === "qwen/qwen3.8-27b" ||
-    clean === "groq/qwen3.8-27b"
+    clean === "groq/qwen3.8-27b" ||
+    clean === "qwen3.2-27b" ||
+    clean === "qwen-3.2-27b" ||
+    clean === "qwen/qwen3.2-27b"
   ) {
     return "qwen3.8-27b";
   }
@@ -195,11 +204,30 @@ export function resolvePromotionalCanonicalId(identifier: string): PromotionalCa
   return null;
 }
 
-export function isStrictlyPromotionalEligible(identifier: string): boolean {
-  return resolvePromotionalCanonicalId(identifier) !== null;
+export function isDailyFreeEligible(identifier: string): boolean {
+  return resolveDailyFreeEligibleId(identifier) !== null;
 }
 
-export const PROMO_DURATION_MS = 48 * 60 * 60 * 1000;
+export function resolvePromotionalCanonicalId(identifier: string): PromotionalCanonicalModel | null {
+  return resolveDailyFreeEligibleId(identifier);
+}
+
+export function isStrictlyPromotionalEligible(identifier: string): boolean {
+  return resolveDailyFreeEligibleId(identifier) !== null;
+}
+
+export function getTodayUtcKey(d = new Date()): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function getNextUtcResetTime(d = new Date()): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0));
+}
+
+export const PROMO_DURATION_MS = 24 * 60 * 60 * 1000;
 
 export function isPromotionActive(activatedAt: Date | string | null): {
   active: boolean;
@@ -208,30 +236,18 @@ export function isPromotionActive(activatedAt: Date | string | null): {
   expiresAt: Date | null;
   eligibleCanonicalModels: readonly string[];
 } {
-  if (!activatedAt) {
-    return {
-      active: false,
-      remainingMs: 0,
-      remainingFormatted: "Not activated",
-      expiresAt: null,
-      eligibleCanonicalModels: PROMOTIONAL_CANONICAL_MODELS,
-    };
-  }
-  const start = new Date(activatedAt).getTime();
-  const expires = start + PROMO_DURATION_MS;
-  const now = Date.now();
-  const remainingMs = Math.max(0, expires - now);
-  const active = remainingMs > 0;
-
+  const now = new Date();
+  const nextReset = getNextUtcResetTime(now);
+  const remainingMs = Math.max(0, nextReset.getTime() - now.getTime());
   const hours = Math.floor(remainingMs / (1000 * 60 * 60));
   const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
 
   return {
-    active,
+    active: true,
     remainingMs,
-    remainingFormatted: active ? `${hours}h ${minutes}m left` : "Expired",
-    expiresAt: new Date(expires),
-    eligibleCanonicalModels: PROMOTIONAL_CANONICAL_MODELS,
+    remainingFormatted: `${hours}h ${minutes}m left (resets at 00:00 UTC)`,
+    expiresAt: nextReset,
+    eligibleCanonicalModels: DAILY_FREE_ELIGIBLE_MODELS,
   };
 }
 

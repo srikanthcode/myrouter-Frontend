@@ -13,7 +13,9 @@ const links = [
   { href: "/rankings", label: "Rankings" },
   { href: "/pricing", label: "Pricing" },
   { href: "/chat", label: "Playground" },
-  { href: "/docs", label: "Docs" },
+  { href: "/docs", label: "Documentation" },
+  { href: "/status", label: "Status" },
+  { href: "/dashboard", label: "Dashboard" },
 ];
 
 export function PublicNav() {

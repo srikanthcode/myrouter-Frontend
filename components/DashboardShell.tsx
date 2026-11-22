@@ -18,6 +18,7 @@ import {
   Menu,
   MessageSquare,
   MessagesSquare,
+  Receipt,
   ScanSearch,
   ScrollText,
   Settings,
@@ -103,7 +104,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 const nav = [
   {
-    section: "Overview", items: [
+    section: "Platform", items: [
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/chat", label: "Playground", icon: MessageSquare },
       { href: "/dashboard/text", label: "Text & Reply", icon: MessagesSquare },
@@ -111,7 +112,7 @@ const nav = [
     ]
   },
   {
-    section: "Build", items: [
+    section: "Developer Tools", items: [
       { href: "/dashboard/keys", label: "API Keys", icon: KeyRound },
       { href: "/dashboard/activity", label: "Activity", icon: ScrollText },
       { href: "/dashboard/usage", label: "Usage", icon: ChartColumn },
@@ -119,9 +120,10 @@ const nav = [
     ]
   },
   {
-    section: "Money", items: [
-      { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
-      { href: "/pricing", label: "Billing & Plans", icon: CreditCard },
+    section: "Billing & Finance", items: [
+      { href: "/dashboard/wallet", label: "Wallet & Billing", icon: Wallet },
+      { href: "/dashboard/transactions", label: "Transactions", icon: Receipt },
+      { href: "/dashboard/subscriptions", label: "Subscription Management", icon: CreditCard },
       { href: "/dashboard/referrals", label: "Referrals", icon: Users },
     ]
   },
@@ -132,7 +134,7 @@ const nav = [
   },
   {
     section: "Account", items: [
-      { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/dashboard/settings", label: "Account Settings", icon: Settings },
       { href: "/docs", label: "Documentation", icon: BookOpen },
     ]
   },

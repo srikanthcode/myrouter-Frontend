@@ -5,8 +5,10 @@ import Link from "next/link";
 import {
   ArrowRight,
   Brain,
+  Check,
+  CheckCircle2,
   Code2,
-  ExternalLink,
+  Copy,
   Eye,
   FileCode2,
   FileText,
@@ -16,15 +18,15 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Terminal,
   Volume2,
+  X,
   Zap,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
 } from "lucide-react";
 import type { ModelSummary, ProviderSummary } from "@/lib/server-api";
 import { compactNumber } from "@/lib/server-api";
 import { cx } from "@/lib/api";
+import { Badge, Button, Modal } from "@/components/ui";
 
 interface ModelsTableProps {
   initialModels: ModelSummary[];
@@ -37,7 +39,7 @@ interface ModelsTableProps {
 const CATEGORY_TABS = [
   { key: "", label: "All Models" },
   { key: "coding", label: "Coding & Agents" },
-  { key: "reasoning", label: "Advanced Reasoning" },
+  { key: "reasoning", label: "Reasoning" },
   { key: "vision", label: "Vision & Multimodal" },
   { key: "fast", label: "Fast & Low Latency" },
   { key: "long_context", label: "Long Context" },
@@ -59,9 +61,24 @@ export function ModelsTable({
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [tierFilter, setTierFilter] = useState<"all" | "promo_free" | "paid">("all");
   const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [selectedCapability, setSelectedCapability] = useState<string>("");
   const [sortBy, setSortBy] = useState<"rank" | "score" | "lowest_input" | "lowest_output" | "highest_context" | "alphabetical">("rank");
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [curlModel, setCurlModel] = useState<ModelSummary | null>(null);
+  const [curlCopied, setCurlCopied] = useState(false);
+
+  // Compute unique providers for dropdown filter
+  const uniqueProviders = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of initialModels) {
+      if (m.providerSlug && m.providerName) {
+        map.set(m.providerSlug, m.providerName);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [initialModels]);
 
   // Filter and sort models
   const filteredModels = useMemo(() => {
@@ -89,17 +106,25 @@ export function ModelsTable({
         return false;
       }
 
-      // 4. Tier filter
-      const isPromo = m.slug === "deepseek-v4.1-flash" || m.slug === "qwen3.8-27b";
-      if (tierFilter === "promo_free" && !isPromo) return false;
-      if (tierFilter === "paid" && isPromo) return false;
+      // 4. Capability filter
+      if (selectedCapability) {
+        if (selectedCapability === "reasoning" && !m.capabilities?.reasoning) return false;
+        if (selectedCapability === "vision" && !m.capabilities?.vision) return false;
+        if (selectedCapability === "toolCalls" && !m.capabilities?.toolCalls) return false;
+        if (selectedCapability === "streaming" && !m.capabilities?.streaming) return false;
+      }
+
+      // 5. Tier filter
+      const isDailyFree = m.slug === "deepseek-v4.1-flash" || m.slug === "qwen3.8-27b";
+      if (tierFilter === "promo_free" && !isDailyFree) return false;
+      if (tierFilter === "paid" && isDailyFree) return false;
 
       return true;
     }).sort((a, b) => {
       const isPromoA = a.slug === "deepseek-v4.1-flash" || a.slug === "qwen3.8-27b";
       const isPromoB = b.slug === "deepseek-v4.1-flash" || b.slug === "qwen3.8-27b";
 
-      // Always elevate promotional models to the top when sorting by rank or default
+      // Keep designated daily free models prioritized on default sort
       if (sortBy === "rank") {
         if (isPromoA && !isPromoB) return -1;
         if (!isPromoA && isPromoB) return 1;
@@ -128,7 +153,7 @@ export function ModelsTable({
       }
       return 0;
     });
-  }, [initialModels, searchQuery, selectedCategory, selectedProvider, tierFilter, sortBy]);
+  }, [initialModels, searchQuery, selectedCategory, selectedProvider, selectedCapability, tierFilter, sortBy]);
 
   // Pagination calculation
   const totalItems = filteredModels.length;
@@ -149,6 +174,26 @@ export function ModelsTable({
     setCurrentPage(1);
   };
 
+  const copyToClipboard = (text: string, id: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  const getCurlSnippet = (modelId: string) => {
+    return `curl https://www.prorouter.in/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $PROROUTER_API_KEY" \\
+  -d '{
+    "model": "${modelId}",
+    "messages": [
+      {"role": "user", "content": "Hello ProRouter!"}
+    ]
+  }'`;
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Search, Controls & Filters Bar ── */}
@@ -164,8 +209,8 @@ export function ModelsTable({
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search 500+ models by name, slug, provider, or architecture…"
-              className="w-full rounded-xl border border-line bg-panel2/60 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-fg placeholder:text-mut2 focus:outline-hidden focus:border-accent/80 transition-colors"
+              placeholder="Search 500+ models by official name, canonical ID, provider, or architecture…"
+              className="w-full rounded-xl border border-line bg-panel2/60 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-fg placeholder:text-mut2 focus:outline-hidden focus:border-accent/80 transition-colors font-mono"
             />
             {searchQuery && (
               <button
@@ -226,44 +271,77 @@ export function ModelsTable({
           </div>
         </div>
 
-        {/* Tier & Access Filter Chips */}
+        {/* Filters Row: Tier, Provider, Capability, Page Size */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-line/50">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-mut2 mr-1">Access:</span>
-            <button
-              onClick={() => handleTierChange("all")}
-              className={cx(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
-                tierFilter === "all"
-                  ? "bg-accent/20 text-accent border border-accent/40"
-                  : "bg-panel2/60 text-mut border border-line hover:text-fg"
-              )}
+            {/* Entitlement Filter */}
+            <div className="inline-flex rounded-lg border border-line bg-panel2/50 p-0.5">
+              <button
+                onClick={() => handleTierChange("all")}
+                className={cx(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  tierFilter === "all"
+                    ? "bg-accent text-accent-ink shadow-xs font-semibold"
+                    : "text-mut hover:text-fg"
+                )}
+              >
+                All Models ({initialModels.length})
+              </button>
+              <button
+                onClick={() => handleTierChange("promo_free")}
+                className={cx(
+                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer",
+                  tierFilter === "promo_free"
+                    ? "bg-accent text-accent-ink shadow-xs"
+                    : "text-accent hover:bg-accent/10"
+                )}
+              >
+                <Sparkles className="size-3" />
+                1M Free/Day (2 Models)
+              </button>
+              <button
+                onClick={() => handleTierChange("paid")}
+                className={cx(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  tierFilter === "paid"
+                    ? "bg-accent text-accent-ink shadow-xs font-semibold"
+                    : "text-mut hover:text-fg"
+                )}
+              >
+                Paid ({initialModels.length - 2})
+              </button>
+            </div>
+
+            {/* Provider Filter */}
+            <select
+              value={selectedProvider}
+              onChange={(e) => {
+                setSelectedProvider(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-line bg-panel2/60 px-2.5 py-1 text-xs text-fg focus:outline-hidden cursor-pointer"
             >
-              All Models ({initialModels.length})
-            </button>
-            <button
-              onClick={() => handleTierChange("promo_free")}
-              className={cx(
-                "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer",
-                tierFilter === "promo_free"
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-panel2/60 text-mut border border-line hover:text-emerald-400"
-              )}
+              <option value="">All Providers ({uniqueProviders.length})</option>
+              {uniqueProviders.map(([slug, name]) => (
+                <option key={slug} value={slug} className="bg-panel text-fg">{name}</option>
+              ))}
+            </select>
+
+            {/* Capability Filter */}
+            <select
+              value={selectedCapability}
+              onChange={(e) => {
+                setSelectedCapability(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-line bg-panel2/60 px-2.5 py-1 text-xs text-fg focus:outline-hidden cursor-pointer"
             >
-              <Sparkles className="size-3 text-emerald-400" />
-              48H Free Launch (2 Canonical Models)
-            </button>
-            <button
-              onClick={() => handleTierChange("paid")}
-              className={cx(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
-                tierFilter === "paid"
-                  ? "bg-accent/20 text-accent border border-accent/40"
-                  : "bg-panel2/60 text-mut border border-line hover:text-fg"
-              )}
-            >
-              Paid Models ({initialModels.length - 2})
-            </button>
+              <option value="">All Capabilities</option>
+              <option value="reasoning" className="bg-panel text-fg">Reasoning</option>
+              <option value="toolCalls" className="bg-panel text-fg">Tool Calling</option>
+              <option value="vision" className="bg-panel text-fg">Vision / Multimodal</option>
+              <option value="streaming" className="bg-panel text-fg">Streaming</option>
+            </select>
           </div>
 
           {/* Model Count & Page Sizer */}
@@ -272,7 +350,7 @@ export function ModelsTable({
               Showing <strong className="text-fg font-mono">{filteredModels.length}</strong> models
             </span>
             <div className="flex items-center gap-1 border border-line rounded-lg bg-panel2/60 px-2 py-0.5">
-              <span className="text-[11px] text-mut2">Page size:</span>
+              <span className="text-[11px] text-mut2">Page:</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
@@ -312,24 +390,24 @@ export function ModelsTable({
         </div>
       </div>
 
-      {/* ── Token Harbor Compact Horizontal Table Layout ── */}
+      {/* ── Swiss-Style Structured Data Table ── */}
       <div className="rounded-2xl border border-line/80 bg-panel shadow-md overflow-hidden backdrop-blur-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-line bg-panel2/60 text-[11px] font-mono uppercase tracking-wider text-mut2">
-                <th scope="col" className="py-3 px-3.5 w-14 text-center">#</th>
-                <th scope="col" className="py-3 px-4 min-w-[280px]">Model & Architecture</th>
-                <th scope="col" className="py-3 px-4 min-w-[190px]">
+                <th scope="col" className="py-3 px-3.5 w-12 text-center">#</th>
+                <th scope="col" className="py-3 px-4 min-w-[280px]">Model & Canonical ID</th>
+                <th scope="col" className="py-3 px-4 min-w-[200px]">
                   Pricing / 1M Tokens
                   <span className="block text-[10px] lowercase text-mut normal-case font-sans">
                     {currency === "INR" ? "Input / Output (₹ INR)" : "Input / Output ($ USD)"}
                   </span>
                 </th>
-                <th scope="col" className="py-3 px-3 min-w-[110px] text-center">Context</th>
-                <th scope="col" className="py-3 px-3 min-w-[100px] text-center">Modalities</th>
-                <th scope="col" className="py-3 px-4 min-w-[120px] text-center">Intelligence</th>
-                <th scope="col" className="py-3 px-4 w-28 text-right">Action</th>
+                <th scope="col" className="py-3 px-3 min-w-[100px] text-center">Context</th>
+                <th scope="col" className="py-3 px-3 min-w-[130px]">Capabilities</th>
+                <th scope="col" className="py-3 px-3 min-w-[90px] text-center">Status</th>
+                <th scope="col" className="py-3 px-4 w-32 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line/60 text-xs">
@@ -344,6 +422,7 @@ export function ModelsTable({
                         setSelectedCategory("");
                         setTierFilter("all");
                         setSelectedProvider("");
+                        setSelectedCapability("");
                       }}
                       className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent hover:underline font-medium"
                     >
@@ -354,230 +433,171 @@ export function ModelsTable({
               ) : (
                 paginatedModels.map((m, idx) => {
                   const globalIdx = (currentPage - 1) * pageSize + idx + 1;
-                  const isPromo = m.slug === "deepseek-v4.1-flash" || m.slug === "qwen3.8-27b";
+                  const isDailyFree = m.slug === "deepseek-v4.1-flash" || m.slug === "qwen3.8-27b";
+                  const canonicalId = m.canonicalModelId || m.slug;
 
                   // Extract prices
                   const inputUsd = m.customerPricingUsd?.inputPerMillion ?? (m.pricing.inputPerMillion / 8000);
                   const outputUsd = m.customerPricingUsd?.outputPerMillion ?? (m.pricing.outputPerMillion / 8000);
+                  const cachedUsd = m.customerPricingUsd?.cachedInputPerMillion ?? (inputUsd * 0.5);
                   const inputInr = (m.pricing.inputPerMillion / 100);
                   const outputInr = (m.pricing.outputPerMillion / 100);
+                  const cachedInr = (inputInr * 0.5);
 
                   // Formatting display string
                   const formattedInPrice = currency === "INR" ? `₹${inputInr.toFixed(2)}` : `$${inputUsd.toFixed(2)}`;
                   const formattedOutPrice = currency === "INR" ? `₹${outputInr.toFixed(2)}` : `$${outputUsd.toFixed(2)}`;
-
-                  // Benchmarks extraction
-                  const topBenchmark = m.benchmarks && m.benchmarks.length > 0 ? m.benchmarks[0] : null;
+                  const formattedCachedPrice = currency === "INR" ? `₹${cachedInr.toFixed(2)}` : `$${cachedUsd.toFixed(2)}`;
 
                   return (
                     <tr
                       key={m.slug}
                       className={cx(
                         "group hover:bg-white/[0.03] transition-colors duration-150",
-                        isPromo && "bg-accent/[0.04] border-l-2 border-l-accent"
+                        isDailyFree && "bg-accent/[0.03] border-l-2 border-l-accent"
                       )}
                     >
                       {/* 1. Rank Column */}
-                      <td className="py-3 px-3.5 text-center font-mono text-[11.5px] text-mut2 font-semibold">
-                        {globalIdx <= 3 ? (
-                          <span className={cx(
-                            "inline-flex size-6 items-center justify-center rounded-full text-xs font-bold",
-                            globalIdx === 1 && "bg-amber-500/20 text-amber-300 border border-amber-500/40",
-                            globalIdx === 2 && "bg-slate-300/20 text-slate-200 border border-slate-300/40",
-                            globalIdx === 3 && "bg-amber-700/20 text-amber-500 border border-amber-700/40"
-                          )}>
-                            {globalIdx}
-                          </span>
-                        ) : (
-                          `#${globalIdx}`
-                        )}
+                      <td className="py-3 px-3.5 text-center font-mono text-[11px] text-mut2">
+                        {globalIdx}
                       </td>
 
-                      {/* 2. Model & Architecture Info */}
+                      {/* 2. Model & Canonical ID */}
                       <td className="py-3 px-4">
                         <div className="flex items-start gap-2.5">
-                          {/* Provider Brand Badge */}
-                          <div className={cx(
-                            "size-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border uppercase font-mono shadow-xs mt-0.5",
-                            m.providerSlug.includes("anthropic") && "bg-amber-900/20 border-amber-600/30 text-amber-300",
-                            m.providerSlug.includes("openai") && "bg-emerald-900/20 border-emerald-600/30 text-emerald-300",
-                            m.providerSlug.includes("deepseek") && "bg-sky-900/20 border-sky-600/30 text-sky-300",
-                            m.providerSlug.includes("qwen") && "bg-purple-900/20 border-purple-600/30 text-purple-300",
-                            m.providerSlug.includes("groq") && "bg-orange-900/20 border-orange-600/30 text-orange-300",
-                            m.providerSlug.includes("requesty") && "bg-indigo-900/20 border-indigo-600/30 text-indigo-300",
-                            m.providerSlug.includes("google") && "bg-blue-900/20 border-blue-600/30 text-blue-300",
-                            m.providerSlug.includes("mistral") && "bg-amber-800/20 border-amber-500/30 text-amber-200",
-                            !["anthropic", "openai", "deepseek", "qwen", "groq", "requesty", "google", "mistral"].some(p => m.providerSlug.includes(p)) &&
-                              "bg-panel2 border-line text-mut2"
-                          )}>
-                            {m.providerName ? m.providerName.slice(0, 2) : "PR"}
+                          {/* Clean Provider Badge */}
+                          <div className="size-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 border border-line bg-panel2/80 text-fg mt-0.5">
+                            {m.providerName ? m.providerName.slice(0, 2).toUpperCase() : "PR"}
                           </div>
 
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <Link
                                 href={`/models/${m.slug}`}
-                                className="font-semibold text-fg hover:text-accent transition-colors duration-150 text-[13.5px] truncate"
+                                className="font-semibold text-fg hover:text-accent transition-colors duration-150 text-[13.5px]"
                               >
                                 {m.name}
                               </Link>
 
-                              {/* Strict promotional badge ONLY for the two canonical models */}
-                              {isPromo && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent uppercase tracking-wider animate-pulse">
+                              {/* Daily Free Entitlement Badge */}
+                              {isDailyFree && (
+                                <span className="inline-flex items-center gap-1 rounded bg-accent/20 border border-accent/40 px-1.5 py-0.5 text-[10px] font-bold text-accent tracking-wide">
                                   <Sparkles className="size-2.5" />
-                                  48H FREE LAUNCH
-                                </span>
-                              )}
-
-                              {m.pricingStatus === "pricing_pending" && (
-                                <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9.5px] font-medium text-amber-300 uppercase">
-                                  Pricing Pending
+                                  1M FREE / DAY
                                 </span>
                               )}
                             </div>
 
-                            {/* Canonical Slug & Provider Pill */}
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <span className="font-mono text-[10.5px] text-mut2 tracking-tight">
-                                {m.canonicalModelId || m.slug}
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-sm bg-white/[0.04] text-mut border border-line/40">
-                                {m.providerName}
-                              </span>
-                            </div>
-
-                            {/* Capability Feature Badges */}
-                            <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                              {m.capabilities.reasoning && (
-                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                                  <Brain className="size-2.5" /> Reasoning
-                                </span>
-                              )}
-                              {m.capabilities.vision && (
-                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] bg-sky-500/10 text-sky-300 border border-sky-500/20">
-                                  <Eye className="size-2.5" /> Vision
-                                </span>
-                              )}
-                              {m.capabilities.toolCalls && (
-                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                                  <FileCode2 className="size-2.5" /> Tools
-                                </span>
-                              )}
-                              {m.capabilities.streaming && (
-                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                                  <Zap className="size-2.5" /> Stream
-                                </span>
-                              )}
+                            {/* Canonical ID with 1-Click Copy */}
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <button
+                                onClick={() => copyToClipboard(canonicalId, `copy-${m.slug}`)}
+                                title="Click to copy canonical model ID"
+                                className="group/copy inline-flex items-center gap-1 font-mono text-[11px] text-mut hover:text-fg transition-colors rounded px-1 py-0.5 hover:bg-panel2 border border-transparent hover:border-line"
+                              >
+                                <span>{canonicalId}</span>
+                                {copiedId === `copy-${m.slug}` ? (
+                                  <Check className="size-3 text-good" />
+                                ) : (
+                                  <Copy className="size-3 opacity-0 group-hover/copy:opacity-100 transition-opacity text-mut2" />
+                                )}
+                              </button>
+                              <span className="text-mut2 text-[10px]">·</span>
+                              <span className="text-[10.5px] text-mut">{m.providerName}</span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 3. Pricing / 1M Tokens (No context window conflation!) */}
+                      {/* 3. Pricing / 1M Tokens */}
                       <td className="py-3 px-4">
-                        {isPromo ? (
+                        {isDailyFree ? (
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-emerald-400 font-mono text-[13px]">
+                              <span className="font-bold text-accent font-mono text-[13px]">
                                 {currency === "INR" ? "₹0.00" : "$0.00"}
                               </span>
-                              <span className="rounded bg-emerald-500/20 text-emerald-300 px-1 py-0.2 text-[9px] font-bold uppercase">
-                                48h Free
+                              <span className="rounded bg-accent/20 text-accent px-1 py-0.2 text-[9.5px] font-bold">
+                                1M / day
                               </span>
                             </div>
-                            <div className="text-[10.5px] text-mut font-mono">
-                              post-launch: {formattedInPrice} in / {formattedOutPrice} out
+                            <div className="text-[10px] text-mut font-mono">
+                              spillover: {formattedInPrice} in / {formattedOutPrice} out
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-1">
-                            <div className="flex items-baseline gap-1.5 font-mono text-[13px] font-semibold text-fg tabular-nums">
+                            <div className="flex items-baseline gap-1.5 font-mono text-[12.5px] font-semibold text-fg tabular-nums">
                               <span className="text-fg">{formattedInPrice}</span>
-                              <span className="text-mut2 text-[11px] font-normal">in</span>
+                              <span className="text-mut2 text-[10.5px] font-normal">in</span>
                               <span className="text-mut2">/</span>
                               <span className="text-fg">{formattedOutPrice}</span>
-                              <span className="text-mut2 text-[11px] font-normal">out</span>
+                              <span className="text-mut2 text-[10.5px] font-normal">out</span>
                             </div>
-                            <div className="text-[10px] text-mut2 flex items-center gap-1">
-                              <span>per 1M tokens</span>
-                              {currency === "INR" && (
-                                <span className="text-emerald-400 font-medium">🇮🇳 ₹80/$1</span>
-                              )}
+                            <div className="text-[10px] text-mut2 flex items-center gap-1 font-mono">
+                              <span>cached: {formattedCachedPrice}</span>
                             </div>
                           </div>
                         )}
                       </td>
 
-                      {/* 4. Dedicated Context Window Column */}
+                      {/* 4. Context Window */}
                       <td className="py-3 px-3 text-center">
-                        {m.contextWindow >= 1000000 ? (
-                          <span className="inline-flex items-center justify-center rounded-md bg-indigo-500/20 border border-indigo-500/40 px-2 py-1 font-mono text-[11px] font-bold text-indigo-300 shadow-xs shadow-indigo-500/10">
-                            1M tokens
-                          </span>
-                        ) : m.contextWindow >= 200000 ? (
-                          <span className="inline-flex items-center justify-center rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-1 font-mono text-[11px] font-semibold text-emerald-300">
-                            {compactNumber(m.contextWindow)} tokens
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center justify-center rounded-md bg-white/[0.04] border border-line px-2 py-1 font-mono text-[11px] text-mut">
-                            {compactNumber(m.contextWindow)} tokens
-                          </span>
-                        )}
+                        <span className="inline-flex items-center justify-center rounded-md bg-panel2/80 border border-line px-2 py-0.5 font-mono text-[11px] text-fg">
+                          {compactNumber(m.contextWindow)}
+                        </span>
                       </td>
 
-                      {/* 5. Modalities Column */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="inline-flex items-center justify-center gap-1.5 text-mut">
-                          <span title="Text supported">
-                            <FileText className="size-3.5 text-fg" />
-                          </span>
-                          {m.capabilities.vision ? (
-                            <span title="Vision & Image supported">
-                              <ImageIcon className="size-3.5 text-sky-400" />
-                            </span>
-                          ) : (
-                            <span title="Text only" className="opacity-20">
-                              <ImageIcon className="size-3.5 text-mut2" />
+                      {/* 5. Capabilities */}
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {m.capabilities?.reasoning && (
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] bg-panel2 text-fg border border-line">
+                              <Brain className="size-2.5 text-accent" /> Reasoning
                             </span>
                           )}
-                          {m.capabilities.audio ? (
-                            <span title="Audio supported">
-                              <Volume2 className="size-3.5 text-amber-400" />
+                          {m.capabilities?.toolCalls && (
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] bg-panel2 text-fg border border-line">
+                              <FileCode2 className="size-2.5 text-accent" /> Tools
                             </span>
-                          ) : null}
-                          {m.capabilities.toolCalls ? (
-                            <span title="Code & Tools supported">
-                              <Code2 className="size-3.5 text-emerald-400" />
+                          )}
+                          {m.capabilities?.vision && (
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] bg-panel2 text-fg border border-line">
+                              <Eye className="size-2.5 text-accent" /> Vision
                             </span>
-                          ) : null}
+                          )}
+                          {m.capabilities?.streaming && (
+                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] bg-panel2 text-fg border border-line">
+                              <Zap className="size-2.5 text-accent" /> Stream
+                            </span>
+                          )}
                         </div>
                       </td>
 
-                      {/* 6. Intelligence & Benchmark Score */}
-                      <td className="py-3 px-4 text-center">
-                        {topBenchmark ? (
-                          <div className="inline-flex flex-col items-center">
-                            <span className="font-mono text-[12.5px] font-bold text-accent">
-                              {topBenchmark.score}%
-                            </span>
-                            <span className="text-[9.5px] text-mut2 tracking-tight">
-                              {topBenchmark.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex flex-col items-center">
-                            <span className="font-mono text-[12px] font-semibold text-fg">
-                              {m.rating}/100
-                            </span>
-                            <span className="text-[9.5px] text-mut2">Composite</span>
-                          </div>
-                        )}
+                      {/* 6. Availability Status */}
+                      <td className="py-3 px-3 text-center">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-good font-mono">
+                          <span className="size-1.5 rounded-full bg-good" />
+                          Active
+                        </span>
                       </td>
 
-                      {/* 7. Quick Action Column */}
+                      {/* 7. Action Column */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Quick API Curl Modal Button */}
+                          <button
+                            onClick={() => {
+                              setCurlModel(m);
+                              setCurlCopied(false);
+                            }}
+                            title="View API curl example"
+                            className="inline-flex size-7 items-center justify-center rounded-lg border border-line bg-panel2/80 text-mut hover:text-fg hover:border-line2 transition-colors cursor-pointer"
+                          >
+                            <Terminal className="size-3" />
+                          </button>
+
+                          {/* Playground Link */}
                           <Link
                             href={`/chat?model=${m.slug}`}
                             title="Test model in playground"
@@ -585,9 +605,11 @@ export function ModelsTable({
                           >
                             <Play className="size-3 fill-current" />
                           </Link>
+
+                          {/* Detail Link */}
                           <Link
                             href={`/models/${m.slug}`}
-                            className="inline-flex items-center gap-1 rounded-lg border border-line2 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-fg hover:bg-white/[0.08] hover:border-accent/50 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-line bg-panel2 px-2 py-1 text-xs font-medium text-fg hover:border-accent/50 transition-colors cursor-pointer"
                           >
                             <span>View</span>
                             <ArrowRight className="size-3 text-mut2 group-hover:text-accent transition-colors" />
@@ -635,6 +657,59 @@ export function ModelsTable({
           </div>
         )}
       </div>
+
+      {/* ── API Usage Code Snippet Modal ── */}
+      <Modal
+        open={!!curlModel}
+        onClose={() => setCurlModel(null)}
+        title={curlModel ? `API Usage: ${curlModel.name}` : "API Usage"}
+      >
+        {curlModel && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-mut">
+                ProRouter provides 100% OpenAI-compatible endpoints. Point your existing SDK or curl to our gateway:
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[11px] font-mono text-mut">Canonical Model ID:</span>
+                <code className="rounded bg-panel2 px-2 py-0.5 font-mono text-xs text-accent border border-line">
+                  {curlModel.canonicalModelId || curlModel.slug}
+                </code>
+              </div>
+            </div>
+
+            <div className="relative rounded-xl border border-line bg-panel2/90 p-3 font-mono text-xs text-fg overflow-x-auto">
+              <pre className="text-[11.5px] leading-relaxed">
+                {getCurlSnippet(curlModel.canonicalModelId || curlModel.slug)}
+              </pre>
+              <button
+                onClick={() => {
+                  copyToClipboard(getCurlSnippet(curlModel.canonicalModelId || curlModel.slug), "modal-curl");
+                  setCurlCopied(true);
+                  setTimeout(() => setCurlCopied(false), 2000);
+                }}
+                className="absolute top-2.5 right-2.5 rounded-lg border border-line bg-panel px-2.5 py-1 text-xs text-mut hover:text-fg transition-colors flex items-center gap-1.5"
+              >
+                {curlCopied ? <Check className="size-3 text-good" /> : <Copy className="size-3" />}
+                <span>{curlCopied ? "Copied" : "Copy curl"}</span>
+              </button>
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <Link
+                href={`/chat?model=${curlModel.slug}`}
+                className="text-xs text-accent hover:underline flex items-center gap-1"
+              >
+                <span>Open in Playground</span>
+                <ArrowRight className="size-3" />
+              </Link>
+              <Button size="sm" onClick={() => setCurlModel(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Pre-compiled 500+ Frontend Model Profiles dataset.
  * Synchronized with the central dynamic pricing engine and ModelProfileRegistry.
- * STRICT POLICY: Only deepseek-v4.1-flash and qwen3.8-27b receive 48h free promotion.
+ * STRICT POLICY: Only deepseek-v4.1-flash and qwen3.8-27b receive 1,000,000 daily free token entitlement.
  */
 
 import type { ModelSummary } from "./server-api";
@@ -1220,7 +1220,7 @@ export const MODEL_PROFILES_500: ModelSummary[] = [
     "name": "DeepSeek V4.1 Flash",
     "category": "coding",
     "categoryLabel": "Coding & Software Engineering",
-    "description": "DeepSeek V4.1 Flash — state-of-the-art high-speed reasoning, coding, and multilingual intelligence. Eligible for 48H launch free access.",
+    "description": "DeepSeek V4.1 Flash — state-of-the-art high-speed reasoning, coding, and multilingual intelligence. Eligible for 1,000,000 daily free tokens.",
     "providerName": "PROROUTER",
     "providerSlug": "prorouter",
     "type": "chat",
@@ -1285,7 +1285,7 @@ export const MODEL_PROFILES_500: ModelSummary[] = [
     "name": "DeepSeek-V4.1-Flash-1017",
     "category": "coding",
     "categoryLabel": "Coding & Software Engineering",
-    "description": "DeepSeek V4.1 Flash checkpoint 1017 — latest frontier open-weight reasoning model. Direct alias sharing 48H launch free entitlement.",
+    "description": "DeepSeek V4.1 Flash checkpoint 1017 — latest frontier open-weight reasoning model. Direct alias sharing 1,000,000 daily free token entitlement.",
     "providerName": "PROROUTER",
     "providerSlug": "prorouter",
     "type": "chat",
@@ -1344,7 +1344,7 @@ export const MODEL_PROFILES_500: ModelSummary[] = [
     "name": "Qwen3.8-27B",
     "category": "coding",
     "categoryLabel": "Coding & Software Engineering",
-    "description": "Alibaba Qwen3.8 27B — high-performance open-weight model with strong multilingual and reasoning abilities. Eligible for 48H launch free access.",
+    "description": "Alibaba Qwen3.8 27B — high-performance open-weight model with strong multilingual and reasoning abilities. Eligible for 1,000,000 daily free tokens.",
     "providerName": "GROQ",
     "providerSlug": "groq",
     "type": "chat",

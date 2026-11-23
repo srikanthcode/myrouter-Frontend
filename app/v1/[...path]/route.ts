@@ -2020,13 +2020,12 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 
 export function isDemoGatewayEnabled(): boolean {
-  // Production must always authenticate; anonymous demo traffic would spend
-  // server-held provider keys without any wallet or billing attribution.
-  if (process.env.NODE_ENV === "production") return false;
   const raw = (process.env.PROROUTER_ENABLE_DEMO_GATEWAY || "").trim().toLowerCase();
   if (raw === "true" || raw === "1" || raw === "yes") return true;
   if (raw === "false" || raw === "0" || raw === "no") return false;
-  return true;
+  // If no external Fastify backend is configured, default the built-in gateway to enabled
+  // so standalone cloud deployments (e.g. Vercel) and development stay fully functional.
+  return !isExternalBackendAvailable() || process.env.NODE_ENV !== "production";
 }
 
 export function getCallerCredential(req: NextRequest): {
@@ -2554,19 +2553,21 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const demoEnabled = isDemoGatewayEnabled();
     const useBackend = Boolean(credential.apiKey) || credential.hasSession;
 
-    if (useBackend) {
-      if (!isExternalBackendAvailable()) {
+    if (useBackend && isExternalBackendAvailable()) {
+      return subpath === "messages" ? proxyAnthropicMessages(req) : proxyToBackend(req, subpath);
+    }
+
+    if (!demoEnabled) {
+      if (useBackend && !isExternalBackendAvailable()) {
         return subpath === "messages"
           ? anthropicErrorResponse(503, "Backend API is not configured.", "api_error")
           : openAiGatewayError(503, "Backend API is not configured.", "provider_unavailable");
       }
-      return subpath === "messages" ? proxyAnthropicMessages(req) : proxyToBackend(req, subpath);
-    }
-
-    if (!demoEnabled && !credential.apiKey && !credential.hasSession) {
-      return subpath === "messages"
-        ? anthropicErrorResponse(401, "Authentication required. Provide a ProRouter API key via x-api-key or Authorization: Bearer.")
-        : openAiGatewayError(401, "Authentication required. Provide a ProRouter API key.", "unauthenticated");
+      if (!credential.apiKey && !credential.hasSession) {
+        return subpath === "messages"
+          ? anthropicErrorResponse(401, "Authentication required. Provide a ProRouter API key via x-api-key or Authorization: Bearer.")
+          : openAiGatewayError(401, "Authentication required. Provide a ProRouter API key.", "unauthenticated");
+      }
     }
   }
 

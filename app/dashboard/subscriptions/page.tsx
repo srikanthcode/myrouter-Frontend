@@ -1,11 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, ShieldCheck, Sparkles, CreditCard, Clock, Zap } from "lucide-react";
 import { Badge, Button, Card, EmptyState, useToast } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
-import { api, cx, formatINR } from "@/lib/api";
+import { ApiError, api, cx, formatINR } from "@/lib/api";
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 interface PlanItem {
   slug: string;
@@ -165,16 +186,128 @@ const USD_PLANS: PlanItem[] = [
   },
 ];
 
-export default function SubscriptionsPage() {
+function SubscriptionsContent() {
   const toast = useToast();
   const { me, refresh } = useSession();
+  const searchParams = useSearchParams();
+  const rawParam = (searchParams.get("plan") || searchParams.get("package") || "").toLowerCase().trim();
+  const requestedCurrency = (searchParams.get("currency") || "").toUpperCase().trim();
+
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
+  const [busy, setBusy] = useState(false);
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (requestedCurrency === "USD") {
+      setCurrency("USD");
+    } else if (requestedCurrency === "INR") {
+      setCurrency("INR");
+    }
+  }, [requestedCurrency]);
+
   const plans = currency === "USD" ? USD_PLANS : INR_PLANS;
   const currentPlanSlug = me?.plan?.slug || "free";
+  const isBuilder = rawParam.includes("builder");
+  const isPro = rawParam.includes("pro") && !rawParam.includes("500");
+  const selectedSlug = isBuilder
+    ? (currency === "USD" ? "builder-usd" : "builder")
+    : isPro
+      ? (currency === "USD" ? "pro-usd" : "pro")
+      : null;
 
   useEffect(() => {
     void refresh();
+    void loadRazorpayScript();
   }, [refresh]);
+
+  async function checkout(p: PlanItem) {
+    if (busy || p.pricePaise === 0) return;
+    setBusy(true);
+    setActiveSlug(p.slug);
+    try {
+      const loaded = await loadRazorpayScript();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!loaded || !(window as any).Razorpay) {
+        toast.push("Could not load Razorpay payment gateway. Please check your connection.", "error");
+        setBusy(false);
+        setActiveSlug(null);
+        return;
+      }
+
+      const res = await api<{
+        paymentId: string;
+        invoice: string;
+        amountPaise: number;
+        currency: string;
+        gatewayOrderId?: string;
+        keyId?: string;
+      }>("/wallet/checkout", {
+        method: "POST",
+        body: { packageSlug: p.slug, currency: p.currency || currency, idempotencyKey: `sub-${p.slug}-${Date.now()}` },
+      });
+
+      if (!res.gatewayOrderId) {
+        throw new Error("Could not initialize payment order. Please try again.");
+      }
+
+      const razorpayKey = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        toast.push("Razorpay Key ID is not configured on this environment.", "error");
+        setBusy(false);
+        setActiveSlug(null);
+        return;
+      }
+
+      const options = {
+        key: razorpayKey,
+        amount: res.amountPaise,
+        currency: res.currency || p.currency || currency || "INR",
+        name: "ProRouter",
+        description: `${p.name} Plan Subscription (${p.priceFormatted}/${p.period})`,
+        image: "https://www.prorouter.in/icon.svg",
+        order_id: res.gatewayOrderId,
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            await api("/wallet/verify", {
+              method: "POST",
+              body: {
+                paymentId: res.paymentId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature,
+              },
+            });
+            toast.push(`Payment successful! You have been upgraded to the ${p.name} Plan.`, "success");
+            await refresh();
+          } catch (verifyErr) {
+            toast.push(verifyErr instanceof ApiError ? verifyErr.message : "Payment verification failed. Please contact support.", "error");
+          } finally {
+            setBusy(false);
+            setActiveSlug(null);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setBusy(false);
+            setActiveSlug(null);
+          },
+        },
+        theme: { color: "#10b981" },
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      setBusy(false);
+      setActiveSlug(null);
+      toast.push(err instanceof Error ? err.message : "Payment could not be started.", "error");
+    }
+  }
 
   return (
     <div className="fade-up space-y-6 max-w-7xl mx-auto pb-12">
@@ -244,7 +377,8 @@ export default function SubscriptionsPage() {
       {/* Plan Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {plans.map((p) => {
-          const isCurrent = currentPlanSlug === p.slug;
+          const isCurrent = currentPlanSlug === p.slug || (currentPlanSlug === "free" && p.slug.startsWith("free"));
+          const isSelected = selectedSlug === p.slug;
           const isFeatured = p.slug.includes("builder");
 
           return (
@@ -252,17 +386,28 @@ export default function SubscriptionsPage() {
               key={p.slug}
               className={cx(
                 "relative flex flex-col p-6 transition-all duration-200",
-                isCurrent ? "border-accent bg-panel2/50" : isFeatured ? "border-accent/40" : "border-line"
+                isSelected
+                  ? "border-accent ring-2 ring-accent/40 bg-panel2/50"
+                  : isCurrent
+                    ? "border-good/50 bg-good/[0.02]"
+                    : isFeatured
+                      ? "border-accent/40"
+                      : "border-line"
               )}
             >
-              {isCurrent && (
+              {isSelected && (
                 <span className="absolute -top-2.5 left-5">
-                  <Badge tone="accent">Current Plan</Badge>
+                  <Badge tone="accent">Selected Plan</Badge>
                 </span>
               )}
-              {!isCurrent && isFeatured && (
+              {!isSelected && isCurrent && (
                 <span className="absolute -top-2.5 left-5">
-                  <Badge tone="good">Popular</Badge>
+                  <Badge tone="good">Current Plan</Badge>
+                </span>
+              )}
+              {!isSelected && !isCurrent && isFeatured && (
+                <span className="absolute -top-2.5 left-5">
+                  <Badge tone="accent">Most Popular</Badge>
                 </span>
               )}
 
@@ -307,13 +452,19 @@ export default function SubscriptionsPage() {
                   <Button variant="secondary" className="w-full" disabled>
                     Current Active Plan
                   </Button>
+                ) : p.pricePaise === 0 ? (
+                  <Button variant="secondary" className="w-full" disabled>
+                    Included Free
+                  </Button>
                 ) : (
-                  <Link
-                    href={`/dashboard/wallet?plan=${p.slug}&currency=${currency}`}
-                    className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-accent px-4 text-xs font-medium text-accent-ink hover:bg-accent2 transition"
+                  <Button
+                    className="w-full"
+                    disabled={busy && activeSlug !== p.slug}
+                    loading={busy && activeSlug === p.slug}
+                    onClick={() => void checkout(p)}
                   >
-                    {p.pricePaise === 0 ? "Downgrade to Free" : `Upgrade to ${p.name}`}
-                  </Link>
+                    {activeSlug === p.slug ? "Initializing..." : `Choose ${p.name} (${p.priceFormatted})`}
+                  </Button>
                 )}
               </div>
             </Card>
@@ -321,5 +472,13 @@ export default function SubscriptionsPage() {
         })}
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-mut font-mono text-xs">Loading subscriptions...</div>}>
+      <SubscriptionsContent />
+    </Suspense>
   );
 }

@@ -35,6 +35,7 @@ interface FallbackPendingOrder {
   invoice: string;
   name: string;
   currency: string;
+  packageSlug?: string;
   createdAt: number;
 }
 
@@ -46,6 +47,51 @@ interface FallbackCheckout {
   gatewayOrderId: string;
 }
 
+export interface FallbackPlan {
+  slug: string;
+  name: string;
+  pricePaise: number;
+  freeRpm: number;
+  freeRph: number;
+  freeRpd: number;
+  concurrency: number;
+  queuePriority: number;
+  expiresAt?: string;
+}
+
+export const DEFAULT_FREE_PLAN: FallbackPlan = {
+  slug: "free",
+  name: "Free",
+  pricePaise: 0,
+  freeRpm: 10,
+  freeRph: 100,
+  freeRpd: 1000,
+  concurrency: 2,
+  queuePriority: 10,
+};
+
+export const BUILDER_PLAN: FallbackPlan = {
+  slug: "builder",
+  name: "Builder",
+  pricePaise: 99900,
+  freeRpm: 30,
+  freeRph: 500,
+  freeRpd: 5000,
+  concurrency: 5,
+  queuePriority: 20,
+};
+
+export const PRO_PLAN: FallbackPlan = {
+  slug: "pro",
+  name: "Pro",
+  pricePaise: 249900,
+  freeRpm: 60,
+  freeRph: 1500,
+  freeRpd: 15000,
+  concurrency: 15,
+  queuePriority: 30,
+};
+
 interface FallbackWallet {
   balancePaise: number;
   transactions: FallbackTx[];
@@ -54,6 +100,7 @@ interface FallbackWallet {
   checkouts: Map<string, FallbackCheckout>;
   redeemedPromos: Set<string>;
   astraExpiresAt: number | null;
+  plan?: FallbackPlan;
 }
 
 interface FallbackApiKey {
@@ -402,10 +449,11 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     const auth = requireSession(req);
     if ("response" in auth) return auth.response;
     const wallet = walletFor(auth.user.id);
+    const userPlan = wallet.plan || DEFAULT_FREE_PLAN;
     return NextResponse.json({
       user: auth.user,
       balancePaise: wallet.balancePaise,
-      plan: { slug: "free", name: "Free Tier", pricePaise: 0, freeRpm: 1, queuePriority: 5 },
+      plan: userPlan,
       astra: astraState(wallet),
     });
   }
@@ -593,18 +641,14 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       const stats = getTelemetryOverview(timeFilter, modelFilter);
       const wallet = walletFor(auth.user.id);
 
+      const userPlan = wallet.plan || DEFAULT_FREE_PLAN;
       return NextResponse.json({
         ...stats,
         balancePaise: wallet.balancePaise,
         balanceFormatted: `₹${(wallet.balancePaise / 100).toFixed(2)}`,
         activeKeys: keysFor(auth.user.id).filter((k) => !k.revokedAt).length,
         freeUsed: 0,
-        plan: {
-          slug: "free",
-          name: "Free Tier",
-          freeRpm: 1,
-          queuePriority: 5,
-        },
+        plan: userPlan,
         queue: [],
       });
     }
@@ -855,6 +899,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       invoice,
       name: pkg.name,
       currency: pkg.currency,
+      packageSlug,
       createdAt: Date.now(),
     });
     while (wallet.orders.size > 20) {
@@ -938,6 +983,22 @@ export async function handleFallback(req: NextRequest, path: string[]) {
       reference: order.invoice,
       createdAt: new Date().toISOString(),
     });
+    // Activate or upgrade subscription plan if this checkout was for a plan
+    if (order.packageSlug) {
+      const slug = order.packageSlug.replace("-usd", "").toLowerCase();
+      if (slug === "builder") {
+        wallet.plan = {
+          ...BUILDER_PLAN,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+      } else if (slug === "pro") {
+        wallet.plan = {
+          ...PRO_PLAN,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+      }
+    }
+
     wallet.payments.unshift({
       id: razorpayPaymentId,
       invoice: order.invoice,
@@ -963,6 +1024,18 @@ export async function handleFallback(req: NextRequest, path: string[]) {
     if ("response" in auth) return auth.response;
     return NextResponse.json({
       items: walletFor(auth.user.id).payments,
+    });
+  }
+
+  // ── Subscriptions ──
+  if (subpath === "/subscriptions" && method === "GET") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const wallet = walletFor(auth.user.id);
+    const userPlan = wallet.plan || DEFAULT_FREE_PLAN;
+    return NextResponse.json({
+      active: userPlan,
+      plans: [DEFAULT_FREE_PLAN, BUILDER_PLAN, PRO_PLAN],
     });
   }
 

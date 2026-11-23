@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowDownToLine,
+  ArrowRight,
   ArrowUpFromLine,
+  Check,
   CheckCircle2,
   Clock,
   CreditCard,
@@ -21,6 +25,7 @@ import { ApiError, api, cx, formatINR, timeAgo } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, Modal, Skeleton, useToast } from "@/components/ui";
 import { useSession } from "@/components/DashboardShell";
 import { useDashboardEvents } from "@/lib/useDashboardEvents";
+import { DEFAULT_PLANS, DEFAULT_PLANS_USD, type PlanSummary } from "@/lib/server-api";
 
 interface WalletData {
   balancePaise: number;
@@ -227,9 +232,13 @@ const DEFAULT_WALLET_PACKAGES_USD: PackageItem[] = [
   },
 ];
 
-export default function WalletPage() {
+function WalletContent() {
   const toast = useToast();
   const { me, refresh } = useSession();
+  const searchParams = useSearchParams();
+  const rawParam = (searchParams.get("package") || searchParams.get("plan") || "").toLowerCase().trim();
+  const requestedCurrency = (searchParams.get("currency") || "").toUpperCase().trim();
+
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [packages, setPackages] = useState<PackageItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -241,6 +250,25 @@ export default function WalletPage() {
   const [checkoutState, setCheckoutState] = useState<CheckoutState>("IDLE");
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+
+  useEffect(() => {
+    if (requestedCurrency === "USD") {
+      setCurrency("USD");
+    } else if (requestedCurrency === "INR") {
+      setCurrency("INR");
+    }
+  }, [requestedCurrency]);
+
+  const plans = currency === "USD" ? DEFAULT_PLANS_USD : DEFAULT_PLANS;
+  const isBuilder = rawParam.includes("builder");
+  const isPro = rawParam.includes("pro") && !rawParam.includes("500");
+  const selectedPlanSlug = isBuilder
+    ? (currency === "USD" ? "builder-usd" : "builder")
+    : isPro
+      ? (currency === "USD" ? "pro-usd" : "pro")
+      : null;
+
+  const selectedPlanBanner = plans.find((p) => p.slug === selectedPlanSlug);
 
   // Preload Razorpay SDK once on component mount
   useEffect(() => {
@@ -308,7 +336,15 @@ export default function WalletPage() {
     void load();
   }, [load, refresh]);
 
-  async function checkout(pkg: PackageItem) {
+  async function checkout(pkg: {
+    slug: string;
+    name: string;
+    priceFormatted: string;
+    pricePaise?: number;
+    totalFormatted?: string;
+    totalPaise?: number;
+    currency?: string;
+  }) {
     if (busy) return;
     setBusy(true);
     setActiveSlug(pkg.slug);
@@ -374,7 +410,12 @@ export default function WalletPage() {
               },
             });
             setCheckoutState("PAYMENT_CONFIRMED");
-            toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
+            const isPlan = pkg.slug.includes("builder") || pkg.slug.includes("pro");
+            if (isPlan) {
+              toast.push(`Payment successful! You have been upgraded to the ${pkg.name}.`, "success");
+            } else {
+              toast.push(`Payment successful! ${pkg.totalFormatted || pkg.priceFormatted} added to your wallet.`, "success");
+            }
 
             // Optimistically add the captured payment immediately to the list
             const newPaymentRow: Payment = {
@@ -553,6 +594,190 @@ export default function WalletPage() {
           <div className="mt-1 text-[12px] text-mut2">Paid inference consumption</div>
         </Card>
       </div>
+
+      {/* Selected Plan Action Banner */}
+      {selectedPlanBanner && selectedPlanBanner.pricePaise > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-accent/40 bg-accent/10 p-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-accent/30 bg-accent/20">
+              <Sparkles className="size-4 text-accent" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-fg">
+                Selected Plan: {selectedPlanBanner.name} ({selectedPlanBanner.priceFormatted} / month)
+              </p>
+              <p className="text-xs text-mut">
+                {selectedPlanBanner.freeRpm} req/min rate limit · {selectedPlanBanner.freeRpd.toLocaleString()} requests/day · Queue priority {selectedPlanBanner.queuePriority}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            loading={busy && activeSlug === selectedPlanBanner.slug}
+            disabled={busy && activeSlug !== selectedPlanBanner.slug}
+            onClick={() => void checkout(selectedPlanBanner)}
+            className="shrink-0"
+          >
+            Activate {selectedPlanBanner.name} ({selectedPlanBanner.priceFormatted})
+          </Button>
+        </div>
+      )}
+
+      {/* Monthly Subscription Plans */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">Monthly Plans ({currency})</h2>
+              <Badge tone="accent">Rate Limits & Priority</Badge>
+            </div>
+            <p className="mt-0.5 text-[12.5px] text-mut">
+              Plans increase your rate limits, free model quota, and queue priority. Model inference is billed directly from your wallet balance.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-panel2/80 p-0.5">
+              <button
+                type="button"
+                onClick={() => setCurrency("INR")}
+                className={cx(
+                  "cursor-pointer rounded-md px-3 py-1 font-mono text-xs font-semibold transition-colors",
+                  currency === "INR" ? "bg-accent text-accent-ink shadow-xs" : "text-mut hover:text-fg"
+                )}
+              >
+                🇮🇳 INR (₹)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency("USD")}
+                className={cx(
+                  "cursor-pointer rounded-md px-3 py-1 font-mono text-xs font-semibold transition-colors",
+                  currency === "USD" ? "bg-accent text-accent-ink shadow-xs" : "text-mut hover:text-fg"
+                )}
+              >
+                🇺🇸 USD ($)
+              </button>
+            </div>
+
+            <Link
+              href="/dashboard/subscriptions"
+              className="text-[12px] font-medium text-accent hover:underline flex items-center gap-1 shrink-0 ml-1"
+            >
+              <span>Subscriptions</span>
+              <ArrowRight className="size-3" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {plans.map((p) => {
+            const currentPlanSlug = me?.plan?.slug || "free";
+            const isCurrent = currentPlanSlug === p.slug || (currentPlanSlug === "free" && p.slug.startsWith("free"));
+            const isSelected = selectedPlanSlug === p.slug;
+            const isFeatured = p.slug.includes("builder");
+
+            return (
+              <Card
+                key={p.slug}
+                className={cx(
+                  "relative flex flex-col p-5 transition-all duration-200",
+                  isSelected
+                    ? "border-accent ring-2 ring-accent/40 bg-panel2/60"
+                    : isCurrent
+                      ? "border-good/50 bg-good/[0.02]"
+                      : isFeatured
+                        ? "border-accent/40 bg-panel hover:border-accent/70"
+                        : "border-line hover:border-line2"
+                )}
+              >
+                {isSelected && (
+                  <span className="absolute -top-2.5 left-4">
+                    <Badge tone="accent">Selected Plan</Badge>
+                  </span>
+                )}
+                {!isSelected && isCurrent && (
+                  <span className="absolute -top-2.5 left-4">
+                    <Badge tone="good">Current Active Plan</Badge>
+                  </span>
+                )}
+                {!isSelected && !isCurrent && isFeatured && (
+                  <span className="absolute -top-2.5 left-4">
+                    <Badge tone="accent">Most Popular</Badge>
+                  </span>
+                )}
+
+                <div className="flex items-baseline justify-between gap-2 mt-1">
+                  <h3 className="text-[15px] font-semibold text-fg">{p.name}</h3>
+                  <div className="font-mono text-xl font-semibold tabular-nums text-fg">
+                    {p.priceFormatted}
+                    <span className="text-[11px] font-normal text-mut2"> / {p.period}</span>
+                  </div>
+                </div>
+                <p className="mt-1 text-[11.5px] text-mut line-clamp-2">{p.tagline}</p>
+
+                <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-line/60 pt-2.5 text-[11px]">
+                  <div>
+                    <dt className="text-mut2">Free / min</dt>
+                    <dd className="font-mono font-medium text-fg">{p.freeRpm}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mut2">Free / day</dt>
+                    <dd className="font-mono font-medium text-fg">{p.freeRpd.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mut2">Concurrency</dt>
+                    <dd className="font-mono font-medium text-fg">{p.concurrency}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mut2">Queue priority</dt>
+                    <dd className="font-mono font-medium text-fg">{p.queuePriority}</dd>
+                  </div>
+                </dl>
+
+                <ul className="mt-3 flex-1 space-y-1.5 border-t border-line/60 pt-2.5 text-[11.5px]">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-start gap-1.5 text-mut">
+                      <Check className="size-3 text-accent shrink-0 mt-0.5" />
+                      <span className="line-clamp-1">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-4">
+                  {p.pricePaise === 0 ? (
+                    <Button variant="secondary" size="sm" className="w-full" disabled>
+                      {isCurrent ? "Current Plan" : "Free Forever"}
+                    </Button>
+                  ) : isCurrent ? (
+                    <Button variant="secondary" size="sm" className="w-full" disabled>
+                      Current Active Plan
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={busy && activeSlug !== p.slug}
+                      loading={busy && activeSlug === p.slug}
+                      onClick={() => void checkout(p)}
+                    >
+                      {activeSlug === p.slug
+                        ? checkoutState === "INITIALIZING"
+                          ? "Initializing..."
+                          : checkoutState === "CHECKOUT_OPEN"
+                            ? "Checkout Active"
+                            : checkoutState === "VERIFYING"
+                              ? "Verifying..."
+                              : `Choose ${p.name} (${p.priceFormatted})`
+                        : `Choose ${p.name} (${p.priceFormatted})`}
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Top up */}
       <section>
@@ -796,5 +1021,13 @@ export default function WalletPage() {
         )}
       </Modal>
     </div>
+  );
+}
+
+export default function WalletPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-mut font-mono text-xs">Loading wallet...</div>}>
+      <WalletContent />
+    </Suspense>
   );
 }

@@ -56,6 +56,22 @@ interface FallbackWallet {
   astraExpiresAt: number | null;
 }
 
+interface FallbackApiKey {
+  id: string;
+  userId: string;
+  name: string;
+  prefix: string;
+  secret: string;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  requestCount: number;
+  spendPaise: number;
+  spendingLimitPaise: number | null;
+  allowedModels: string[] | null;
+}
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -66,7 +82,17 @@ export interface SessionUser {
 }
 
 const fallbackWallets = new Map<string, FallbackWallet>();
+const fallbackKeys = new Map<string, FallbackApiKey[]>();
 const demoUsers = new Map<string, { passwordHash: string; salt: string; name: string }>();
+
+function keysFor(userId: string): FallbackApiKey[] {
+  let list = fallbackKeys.get(userId);
+  if (!list) {
+    list = [];
+    fallbackKeys.set(userId, list);
+  }
+  return list;
+}
 
 function walletFor(userId: string): FallbackWallet {
   let wallet = fallbackWallets.get(userId);
@@ -422,11 +448,137 @@ export async function handleFallback(req: NextRequest, path: string[]) {
   }
 
   // ── Keys ──
-  if (subpath === "/keys" || subpath.startsWith("/keys/")) {
+  if (subpath === "/keys" && method === "GET") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const list = keysFor(auth.user.id);
+    return NextResponse.json({
+      items: list.map((k) => ({
+        id: k.id,
+        name: k.name,
+        prefix: k.prefix,
+        createdAt: k.createdAt,
+        expiresAt: k.expiresAt,
+        revokedAt: k.revokedAt,
+        lastUsedAt: k.lastUsedAt,
+        requestCount: k.requestCount,
+        spendPaise: k.spendPaise,
+        spendingLimitPaise: k.spendingLimitPaise,
+        allowedModels: k.allowedModels,
+      })),
+    });
+  }
+
+  if (subpath === "/keys" && method === "POST") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const body = await readJson(req);
+    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 64) : "Default Key";
+    const expiresInDays = typeof body.expiresInDays === "number" && body.expiresInDays > 0 ? body.expiresInDays : null;
+    const spendingLimitPaise = typeof body.spendingLimitPaise === "number" && body.spendingLimitPaise >= 0 ? body.spendingLimitPaise : null;
+    const allowedModels = Array.isArray(body.allowedModels) ? body.allowedModels : null;
+
+    const list = keysFor(auth.user.id);
+    if (list.filter((k) => !k.revokedAt).length >= 20) {
+      return NextResponse.json(
+        { error: { code: "invalid_request", message: "You have reached the maximum of 20 API keys. Revoke one to continue." } },
+        { status: 400 },
+      );
+    }
+
+    const id = "key_" + randomBytes(12).toString("hex");
+    const secretEntropy = randomBytes(24).toString("hex");
+    const secret = `pr_live_${secretEntropy}`;
+    const prefix = `pr_live_${secretEntropy.slice(0, 8)}`;
+    const now = new Date();
+    const expiresAt = expiresInDays ? new Date(now.getTime() + expiresInDays * 86400000).toISOString() : null;
+
+    const newKey: FallbackApiKey = {
+      id,
+      userId: auth.user.id,
+      name,
+      prefix,
+      secret,
+      createdAt: now.toISOString(),
+      expiresAt,
+      revokedAt: null,
+      lastUsedAt: null,
+      requestCount: 0,
+      spendPaise: 0,
+      spendingLimitPaise,
+      allowedModels,
+    };
+
+    list.unshift(newKey);
+
     return NextResponse.json(
-      { error: { code: "provider_unavailable", message: "API keys are issued by the ProRouter backend and are not available in the built-in demo gateway." } },
-      { status: 503 },
+      {
+        key: {
+          id: newKey.id,
+          name: newKey.name,
+          prefix: newKey.prefix,
+          createdAt: newKey.createdAt,
+          expiresAt: newKey.expiresAt,
+          revokedAt: newKey.revokedAt,
+          lastUsedAt: newKey.lastUsedAt,
+          requestCount: newKey.requestCount,
+          spendPaise: newKey.spendPaise,
+          spendingLimitPaise: newKey.spendingLimitPaise,
+          allowedModels: newKey.allowedModels,
+        },
+        secret,
+      },
+      { status: 201 },
     );
+  }
+
+  if (subpath.startsWith("/keys/") && subpath.endsWith("/rotate") && method === "POST") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const parts = subpath.split("/");
+    const id = parts[2];
+    const list = keysFor(auth.user.id);
+    const key = list.find((k) => k.id === id);
+    if (!key) {
+      return NextResponse.json({ error: { code: "not_found", message: "API key not found." } }, { status: 404 });
+    }
+
+    const secretEntropy = randomBytes(24).toString("hex");
+    const secret = `pr_live_${secretEntropy}`;
+    key.secret = secret;
+    key.prefix = `pr_live_${secretEntropy.slice(0, 8)}`;
+    key.revokedAt = null;
+
+    return NextResponse.json({
+      key: {
+        id: key.id,
+        name: key.name,
+        prefix: key.prefix,
+        createdAt: key.createdAt,
+        expiresAt: key.expiresAt,
+        revokedAt: key.revokedAt,
+        lastUsedAt: key.lastUsedAt,
+        requestCount: key.requestCount,
+        spendPaise: key.spendPaise,
+        spendingLimitPaise: key.spendingLimitPaise,
+        allowedModels: key.allowedModels,
+      },
+      secret,
+    });
+  }
+
+  if (subpath.startsWith("/keys/") && method === "DELETE") {
+    const auth = requireSession(req);
+    if ("response" in auth) return auth.response;
+    const parts = subpath.split("/");
+    const id = parts[2];
+    const list = keysFor(auth.user.id);
+    const key = list.find((k) => k.id === id);
+    if (!key) {
+      return NextResponse.json({ error: { code: "not_found", message: "API key not found." } }, { status: 404 });
+    }
+    key.revokedAt = new Date().toISOString();
+    return NextResponse.json({ ok: true });
   }
 
   // ── Dashboard Overview & Stats ──
@@ -445,7 +597,7 @@ export async function handleFallback(req: NextRequest, path: string[]) {
         ...stats,
         balancePaise: wallet.balancePaise,
         balanceFormatted: `₹${(wallet.balancePaise / 100).toFixed(2)}`,
-        activeKeys: 0,
+        activeKeys: keysFor(auth.user.id).filter((k) => !k.revokedAt).length,
         freeUsed: 0,
         plan: {
           slug: "free",

@@ -50,7 +50,7 @@ function getNextNabhKey(): string | null {
 }
 
 // ── Upstream AI Gateway Configuration (All secrets read from private environment variables) ──
-const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/+$/, "");
+const BACKEND_BASE = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 
 export function isExternalBackendAvailable(): boolean {
   if (!BACKEND_BASE) return false;
@@ -2554,7 +2554,12 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const demoEnabled = isDemoGatewayEnabled();
     const useBackend = Boolean(credential.apiKey) || credential.hasSession;
 
-    if (useBackend && isExternalBackendAvailable()) {
+    if (useBackend) {
+      if (!isExternalBackendAvailable()) {
+        return subpath === "messages"
+          ? anthropicErrorResponse(503, "Backend API is not configured.", "api_error")
+          : openAiGatewayError(503, "Backend API is not configured.", "provider_unavailable");
+      }
       return subpath === "messages" ? proxyAnthropicMessages(req) : proxyToBackend(req, subpath);
     }
 

@@ -3074,19 +3074,34 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
       if (fmRes.ok) {
         const text = await fmRes.text();
-        const lines = text.split("\n");
         let accumulated = "";
         const parsedToolCalls: any[] = [];
-        for (const l of lines) {
-          const trimmed = l.trim();
-          if (!trimmed.startsWith("data:") || trimmed === "data: [DONE]") continue;
-          try {
-            const p = JSON.parse(trimmed.slice(5).trim());
-            const c = p.choices?.[0]?.delta?.content || p.choices?.[0]?.message?.content || "";
-            if (c) accumulated += c;
-            const tc = p.choices?.[0]?.delta?.tool_calls || p.choices?.[0]?.message?.tool_calls;
-            if (Array.isArray(tc)) parsedToolCalls.push(...tc);
-          } catch { }
+        try {
+          const directJson = JSON.parse(text);
+          if (typeof directJson.content === "string") {
+            accumulated = directJson.content;
+          } else if (directJson.choices?.[0]?.message?.content) {
+            accumulated = directJson.choices[0].message.content;
+          } else if (directJson.choices?.[0]?.delta?.content) {
+            accumulated = directJson.choices[0].delta.content;
+          }
+          const tc = directJson.choices?.[0]?.message?.tool_calls || directJson.choices?.[0]?.delta?.tool_calls || directJson.tool_calls;
+          if (Array.isArray(tc)) parsedToolCalls.push(...tc);
+        } catch { }
+
+        if (!accumulated && parsedToolCalls.length === 0) {
+          const lines = text.split("\n");
+          for (const l of lines) {
+            const trimmed = l.trim();
+            if (!trimmed.startsWith("data:") || trimmed === "data: [DONE]") continue;
+            try {
+              const p = JSON.parse(trimmed.slice(5).trim());
+              const c = p.choices?.[0]?.delta?.content || p.choices?.[0]?.message?.content || "";
+              if (c) accumulated += c;
+              const tc = p.choices?.[0]?.delta?.tool_calls || p.choices?.[0]?.message?.tool_calls;
+              if (Array.isArray(tc)) parsedToolCalls.push(...tc);
+            } catch { }
+          }
         }
         if (accumulated || parsedToolCalls.length > 0) {
           const cleaned = cleanNonStreamingMessage(
@@ -3717,19 +3732,34 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
       if (fmRes.ok) {
         const text = await fmRes.text();
-        const lines = text.split("\n");
         let accumulated = "";
         const parsedToolCalls: any[] = [];
-        for (const l of lines) {
-          const trimmed = l.trim();
-          if (!trimmed.startsWith("data:") || trimmed === "data: [DONE]") continue;
-          try {
-            const p = JSON.parse(trimmed.slice(5).trim());
-            const c = p.choices?.[0]?.delta?.content || p.choices?.[0]?.message?.content || "";
-            if (c) accumulated += c;
-            const tc = p.choices?.[0]?.delta?.tool_calls || p.choices?.[0]?.message?.tool_calls;
-            if (Array.isArray(tc)) parsedToolCalls.push(...tc);
-          } catch { }
+        try {
+          const directJson = JSON.parse(text);
+          if (typeof directJson.content === "string") {
+            accumulated = directJson.content;
+          } else if (directJson.choices?.[0]?.message?.content) {
+            accumulated = directJson.choices[0].message.content;
+          } else if (directJson.choices?.[0]?.delta?.content) {
+            accumulated = directJson.choices[0].delta.content;
+          }
+          const tc = directJson.choices?.[0]?.message?.tool_calls || directJson.choices?.[0]?.delta?.tool_calls || directJson.tool_calls;
+          if (Array.isArray(tc)) parsedToolCalls.push(...tc);
+        } catch { }
+
+        if (!accumulated && parsedToolCalls.length === 0) {
+          const lines = text.split("\n");
+          for (const l of lines) {
+            const trimmed = l.trim();
+            if (!trimmed.startsWith("data:") || trimmed === "data: [DONE]") continue;
+            try {
+              const p = JSON.parse(trimmed.slice(5).trim());
+              const c = p.choices?.[0]?.delta?.content || p.choices?.[0]?.message?.content || "";
+              if (c) accumulated += c;
+              const tc = p.choices?.[0]?.delta?.tool_calls || p.choices?.[0]?.message?.tool_calls;
+              if (Array.isArray(tc)) parsedToolCalls.push(...tc);
+            } catch { }
+          }
         }
         if (accumulated || parsedToolCalls.length > 0) {
           const cleaned = cleanNonStreamingMessage(

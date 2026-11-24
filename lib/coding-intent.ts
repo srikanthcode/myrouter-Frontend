@@ -48,7 +48,7 @@ export class CodingIntentDetector {
 
     // 1. Code debugging
     if (
-      /\b(debug|fix\s+(?:bug|error|issue|exception|crash|compilation|syntax)|troubleshoot|correct\s+this|why\s+is\s+this\s+(?:failing|broken|throwing))\b/i.test(lower) ||
+      /\b(debug|fix(?:\s+(?:this|the|all|my)?\s*(?:bug|error|issue|exception|crash|code|compilation|syntax|problem|everything)?)?|troubleshoot|correct\s+this|why\s+is\s+this\s+(?:failing|broken|throwing))\b/i.test(lower) ||
       /\b(typeerror|syntaxerror|referenceerror|stack\s*trace|compilation\s*error|runtime\s*error)\b/i.test(lower)
     ) {
       return "code_debugging";

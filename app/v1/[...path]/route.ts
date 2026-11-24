@@ -2579,6 +2579,58 @@ async function proxyAnthropicMessages(req: NextRequest): Promise<Response> {
   return NextResponse.json(openAiCompletionToAnthropic(data, conversion), { headers });
 }
 
+function inferenceJsonResponse(
+  subpath: string,
+  body: any,
+  init?: { status?: number; headers?: HeadersInit }
+) {
+  if (subpath === "responses" && body && Array.isArray(body.choices) && body.choices.length > 0) {
+    const rawChoice = body.choices[0];
+    const rawMsg = rawChoice?.message || {};
+    const outputText = typeof rawMsg.content === "string" ? rawMsg.content : "";
+    const outputItems: any[] = [];
+    if (outputText) {
+      outputItems.push({
+        id: "msg_" + (body.id ? String(body.id).replace(/^chatcmpl-/, "") : Math.random().toString(36).slice(2, 11)),
+        type: "message",
+        status: "completed",
+        role: rawMsg.role || "assistant",
+        content: [{ type: "output_text", text: outputText }],
+      });
+    }
+    if (Array.isArray(rawMsg.tool_calls)) {
+      for (const tc of rawMsg.tool_calls) {
+        outputItems.push({
+          id: tc.id || ("call_" + Math.random().toString(36).slice(2, 10)),
+          call_id: tc.id || ("call_" + Math.random().toString(36).slice(2, 10)),
+          type: "function_call",
+          name: tc.function?.name || "tool",
+          arguments: tc.function?.arguments || "{}",
+          status: "completed",
+        });
+      }
+    }
+    const usage = body.usage || {};
+    const responsesPayload = {
+      ...body,
+      id: "resp_" + (body.id ? String(body.id).replace(/^chatcmpl-/, "") : Math.random().toString(36).slice(2, 11)),
+      object: "response",
+      status: "completed",
+      output: outputItems,
+      output_text: outputText,
+      usage: {
+        total_tokens: usage.total_tokens || ((usage.prompt_tokens || 0) + (usage.completion_tokens || 0)),
+        input_tokens: usage.prompt_tokens || 0,
+        output_tokens: usage.completion_tokens || 0,
+        prompt_tokens: usage.prompt_tokens || 0,
+        completion_tokens: usage.completion_tokens || 0,
+      },
+    };
+    return NextResponse.json(responsesPayload, init);
+  }
+  return NextResponse.json(body, init);
+}
+
 export async function handleV1(req: NextRequest, rawPath: string[]) {
   // Strip any leading "v1"
   let path = [...rawPath];
@@ -2589,7 +2641,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
   const subpath = path.join("/");
 
   const isInferenceRequest =
-    req.method === "POST" && (subpath === "chat/completions" || subpath === "messages");
+    req.method === "POST" && (subpath === "chat/completions" || subpath === "messages" || subpath === "responses");
 
   if (isInferenceRequest) {
     const credential = getCallerCredential(req);
@@ -2709,8 +2761,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     return NextResponse.json(model, { headers: CORS_HEADERS });
   }
 
-  // ── 3. POST /v1/chat/completions ──
-  if (subpath === "chat/completions" && req.method === "POST") {
+  // ── 3. POST /v1/chat/completions or POST /v1/responses ──
+  if ((subpath === "chat/completions" || subpath === "responses") && req.method === "POST") {
     let payload: Record<string, unknown> = {};
     try {
       payload = await req.json();
@@ -2719,6 +2771,28 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         { error: { message: "Invalid JSON body", type: "invalid_request_error" } },
         { status: 400, headers: CORS_HEADERS }
       );
+    }
+
+    if (subpath === "responses") {
+      if (!Array.isArray(payload.messages) && payload.input !== undefined) {
+        if (typeof payload.input === "string") {
+          payload.messages = [{ role: "user", content: payload.input }];
+        } else if (Array.isArray(payload.input)) {
+          payload.messages = (payload.input as any[]).map((item: any) => {
+            if (item && typeof item === "object") {
+              if (item.role && item.content) return item;
+              if (item.type === "message") return { role: item.role || "user", content: item.content };
+              if (typeof item.text === "string") return { role: "user", content: item.text };
+            }
+            return { role: "user", content: String(item) };
+          });
+        }
+      }
+      if (typeof payload.instructions === "string" && payload.instructions.trim().length > 0) {
+        if (Array.isArray(payload.messages)) {
+          (payload.messages as any[]).unshift({ role: "system", content: payload.instructions.trim() });
+        }
+      }
     }
 
     const requestedRawModel = typeof payload.model === "string" && payload.model.trim()
@@ -2877,7 +2951,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               status: "success",
               apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
             });
-            return NextResponse.json({
+            return inferenceJsonResponse(subpath, {
               id: reqId,
               object: "chat.completion",
               created: createdTimestamp,
@@ -2934,7 +3008,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               status: "success",
               apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
             });
-            return NextResponse.json({
+            return inferenceJsonResponse(subpath, {
               id: reqId,
               object: "chat.completion",
               created: createdTimestamp,
@@ -2996,7 +3070,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
               status: "success",
               apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
             });
-            return NextResponse.json({
+            return inferenceJsonResponse(subpath, {
               id: reqId,
               object: "chat.completion",
               created: createdTimestamp,
@@ -3046,7 +3120,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           status: "success",
           apiKey: clientKey ? clientKey.slice(0, 16) + "..." : undefined,
         });
-        return NextResponse.json(data, { status: 200, headers: modelHonestyHeaders(requestedRawModel, GATEWAY_MODEL) });
+        return inferenceJsonResponse(subpath, data, { status: 200, headers: modelHonestyHeaders(requestedRawModel, GATEWAY_MODEL) });
       }
     } catch {
       clearTimeout(timeoutId);
@@ -3115,7 +3189,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           const outMessage: Record<string, unknown> = { role: "assistant", content: cleaned.content };
           if (cleaned.tool_calls && cleaned.tool_calls.length > 0) outMessage.tool_calls = cleaned.tool_calls;
           if (cleaned.reasoning_content) outMessage.reasoning_content = cleaned.reasoning_content;
-          return NextResponse.json({
+          return inferenceJsonResponse(subpath, {
             id: reqId,
             object: "chat.completion",
             created: createdTimestamp,
@@ -3133,7 +3207,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
     if (isCodingTask) {
       const fallbackCode = CodingIntentDetector.generateFallbackCode(effectiveMessages as any[]);
-      return NextResponse.json({
+      return inferenceJsonResponse(subpath, {
         id: reqId,
         object: "chat.completion",
         created: createdTimestamp,
@@ -3828,7 +3902,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
   return NextResponse.json(
     {
       error: {
-        message: `Path /v1/${subpath} not found. Available endpoints: /v1/models, /v1/chat/completions, /v1/messages`,
+        message: `Path /v1/${subpath} not found. Available endpoints: /v1/models, /v1/chat/completions, /v1/messages, /v1/responses`,
         type: "invalid_request_error",
       },
     },

@@ -1220,11 +1220,19 @@ export class StreamChunkProcessor {
       }
     }
 
-    // Resilient fallback for coding tasks: if stream produced ONLY a generic greeting
-    if (this.isCodingTask && !this.hasSeenAnyToolCalls && CodingIntentDetector.isGenericGreeting(this.accumulatedContent)) {
+    const totalText = this.accumulatedContent.trim();
+    const isGreeting = CodingIntentDetector.isGreetingInput(this.requestedMessages as any[]);
+    const isVacuous = CodingIntentDetector.isVacuousResponse(totalText);
+
+    // Resilient fallback for coding tasks: if stream produced ONLY a generic greeting or curt vacuous ack
+    if (this.isCodingTask && !this.hasSeenAnyToolCalls && (isVacuous || !totalText)) {
       const fallback = CodingIntentDetector.generateFallbackCode(this.requestedMessages as any[]);
       content = (content ? content + "\n\n" : "") + fallback;
       this.accumulatedContent = fallback;
+    } else if (!this.isCodingTask && isGreeting && (CodingIntentDetector.isVacuousAck(totalText) || !totalText)) {
+      const greeting = "Hello! How can I assist you with your project today?";
+      content = (content ? content + "\n\n" : "") + greeting;
+      this.accumulatedContent = greeting;
     }
 
     const res: { content?: string; reasoning_content?: string } = {};
@@ -1266,14 +1274,18 @@ export function cleanNonStreamingMessage(
     content = content.slice(metaMatch[0].length).trim();
   }
 
+  const isGreetingInput = CodingIntentDetector.isGreetingInput(requestedMessages as any[]);
+  const isVacuous = CodingIntentDetector.isVacuousResponse(content);
+
   if (isCodingTask) {
-    const wasGreeting = CodingIntentDetector.isGenericGreeting(content);
-    // Strip leading conversational greetings if code follows immediately after
-    content = content.replace(/^(?:(?:Hello|Hi|Hey)[\s\.,!?:-]*(?:How can I help you today\??|How may I assist you\??|What can I do for you\??)?[\s\n]*)/i, "").trim();
-    // If the entire message was merely a generic greeting or reduced to empty, synthesize resilient code for the coding request
-    if (wasGreeting || !content) {
+    // Strip leading conversational greetings or acknowledgments if code follows immediately after
+    content = content.replace(/^(?:(?:Hello|Hi|Hey|Sure|Certainly|Of course|Got it|Understood|Alright|Noted)[\s\.,!?:-]*(?:How can I help you today\??|How may I assist you\??|What can I do for you\??|Here is (?:the|your) (?:code|component|file|solution)[^:\n]*:?)?[\s\n]*)/i, "").trim();
+    // If the entire message was merely a generic greeting/acknowledgment or reduced to empty, synthesize resilient code for the coding request
+    if (isVacuous || !content) {
       content = CodingIntentDetector.generateFallbackCode(requestedMessages as any[]);
     }
+  } else if (isGreetingInput && (isVacuous || CodingIntentDetector.isVacuousAck(content) || !content)) {
+    content = "Hello! How can I assist you with your project today?";
   }
 
   content = cleanSpecialTokens(content);

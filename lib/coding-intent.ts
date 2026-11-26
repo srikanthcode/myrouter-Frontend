@@ -386,13 +386,13 @@ export default function App() {
 }`;
     }
 
-    if (lower.includes("html") || lower.includes("website") || lower.includes("page")) {
+    if (/\b(?:html|website|web\s*page|landing\s*page)\b/i.test(lower)) {
       return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Application</title>
+  <title>ProRouter Web Application</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
     .card { max-width: 500px; width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -401,9 +401,9 @@ export default function App() {
 </head>
 <body>
   <div class="card">
-    <h2>Interactive App</h2>
-    <p id="status">Ready</p>
-    <button onclick="document.getElementById('status').textContent = 'Action executed successfully at ' + new Date().toLocaleTimeString()">Click Me</button>
+    <h1>ProRouter Web Application</h1>
+    <p id="status">Application initialized and ready.</p>
+    <button onclick="document.getElementById('status').textContent = 'Action executed successfully at ' + new Date().toLocaleTimeString()">Execute Action</button>
   </div>
 </body>
 </html>`;

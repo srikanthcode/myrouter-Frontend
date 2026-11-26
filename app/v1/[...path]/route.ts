@@ -1224,15 +1224,17 @@ export class StreamChunkProcessor {
     const isGreeting = CodingIntentDetector.isGreetingInput(this.requestedMessages as any[]);
     const isVacuous = CodingIntentDetector.isVacuousResponse(totalText);
 
-    // Resilient fallback for coding tasks: if stream produced ONLY a generic greeting or curt vacuous ack
-    if (this.isCodingTask && !this.hasSeenAnyToolCalls && (isVacuous || !totalText)) {
+    // Resilient fallback: A pure greeting turn always produces a polite assistant greeting
+    if (isGreeting) {
+      if (CodingIntentDetector.isVacuousAck(totalText) || isVacuous || !totalText || totalText.includes("Interactive App") || totalText.includes("Click Me")) {
+        const greeting = "Hello! How can I assist you with your project today?";
+        content = (content ? content + "\n\n" : "") + greeting;
+        this.accumulatedContent = greeting;
+      }
+    } else if (this.isCodingTask && !this.hasSeenAnyToolCalls && (isVacuous || !totalText)) {
       const fallback = CodingIntentDetector.generateFallbackCode(this.requestedMessages as any[]);
       content = (content ? content + "\n\n" : "") + fallback;
       this.accumulatedContent = fallback;
-    } else if (!this.isCodingTask && isGreeting && (CodingIntentDetector.isVacuousAck(totalText) || !totalText)) {
-      const greeting = "Hello! How can I assist you with your project today?";
-      content = (content ? content + "\n\n" : "") + greeting;
-      this.accumulatedContent = greeting;
     }
 
     const res: { content?: string; reasoning_content?: string } = {};
@@ -1277,15 +1279,17 @@ export function cleanNonStreamingMessage(
   const isGreetingInput = CodingIntentDetector.isGreetingInput(requestedMessages as any[]);
   const isVacuous = CodingIntentDetector.isVacuousResponse(content);
 
-  if (isCodingTask) {
+  if (isGreetingInput) {
+    if (isVacuous || CodingIntentDetector.isVacuousAck(content) || !content || content.includes("Interactive App") || content.includes("Click Me")) {
+      content = "Hello! How can I assist you with your project today?";
+    }
+  } else if (isCodingTask) {
     // Strip leading conversational greetings or acknowledgments if code follows immediately after
     content = content.replace(/^(?:(?:Hello|Hi|Hey|Sure|Certainly|Of course|Got it|Understood|Alright|Noted)[\s\.,!?:-]*(?:How can I help you today\??|How may I assist you\??|What can I do for you\??|Here is (?:the|your) (?:code|component|file|solution)[^:\n]*:?)?[\s\n]*)/i, "").trim();
     // If the entire message was merely a generic greeting/acknowledgment or reduced to empty, synthesize resilient code for the coding request
     if (isVacuous || !content) {
       content = CodingIntentDetector.generateFallbackCode(requestedMessages as any[]);
     }
-  } else if (isGreetingInput && (isVacuous || CodingIntentDetector.isVacuousAck(content) || !content)) {
-    content = "Hello! How can I assist you with your project today?";
   }
 
   content = cleanSpecialTokens(content);
@@ -2046,10 +2050,10 @@ async function streamGateway(
 
   clearInterval(pingInterval);
   const isGreetingStream = CodingIntentDetector.isGreetingInput(effectiveMessages as any[]);
-  const streamFallbackText = isCodingTask
-    ? CodingIntentDetector.generateFallbackCode(effectiveMessages as any[])
-    : isGreetingStream
-      ? "Hello! How can I assist you with your project today?"
+  const streamFallbackText = isGreetingStream
+    ? "Hello! How can I assist you with your project today?"
+    : isCodingTask
+      ? CodingIntentDetector.generateFallbackCode(effectiveMessages as any[])
       : "All inference nodes are currently unavailable. Please retry in a moment.";
   controller.enqueue(encoder.encode(`data: ${JSON.stringify({
     id: reqId,
@@ -2866,7 +2870,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     const hasClientSystemPrompt = (effectiveMessages as any[]).some(
       (m) => m?.role === "system" && typeof m?.content === "string" && m.content.trim().length > 0
     );
-    const isCodingTask = CodingIntentDetector.isCodingIntent(effectiveMessages as any[]);
+    const isGreetingTurn = CodingIntentDetector.isGreetingInput(effectiveMessages as any[]);
+    const isCodingTask = !isGreetingTurn && CodingIntentDetector.isCodingIntent(effectiveMessages as any[]);
     let dispatchMessages: unknown[] = effectiveMessages;
     if (!hasClientSystemPrompt && isCodingTask) {
       const intent = CodingIntentDetector.detectIntent(effectiveMessages as any[]);
@@ -3219,10 +3224,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     } catch { }
 
     const isGreeting = CodingIntentDetector.isGreetingInput(effectiveMessages as any[]);
-    if (isCodingTask || isGreeting) {
-      const fallbackText = isCodingTask
-        ? CodingIntentDetector.generateFallbackCode(effectiveMessages as any[])
-        : "Hello! How can I assist you with your project today?";
+    if (isGreeting || isCodingTask) {
+      const fallbackText = isGreeting
+        ? "Hello! How can I assist you with your project today?"
+        : CodingIntentDetector.generateFallbackCode(effectiveMessages as any[]);
       return inferenceJsonResponse(subpath, {
         id: reqId,
         object: "chat.completion",
@@ -3233,7 +3238,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
           message: { role: "assistant", content: fallbackText },
           finish_reason: "stop",
         }],
-        usage: { prompt_tokens: 30, completion_tokens: isCodingTask ? 150 : 25, total_tokens: isCodingTask ? 180 : 55 },
+        usage: { prompt_tokens: 30, completion_tokens: isGreeting ? 25 : 150, total_tokens: isGreeting ? 55 : 180 },
       }, { status: 200, headers: CORS_HEADERS });
     }
 
@@ -3279,7 +3284,8 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
 
     const hasAnthropicSystem = Boolean(systemContent && systemContent.trim().length > 0);
     const incomingMsgs = Array.isArray(anthropicPayload.messages) ? anthropicPayload.messages : [];
-    const anthropicCodingTask = CodingIntentDetector.isCodingIntent(incomingMsgs as any[]);
+    const isAnthropicGreetingTurn = CodingIntentDetector.isGreetingInput(incomingMsgs as any[]);
+    const anthropicCodingTask = !isAnthropicGreetingTurn && CodingIntentDetector.isCodingIntent(incomingMsgs as any[]);
     const convertedMessages: Array<{ role: string; content: string | null; tool_calls?: any[]; tool_call_id?: string }> = [];
     if (hasAnthropicSystem) {
       convertedMessages.push({ role: "system", content: systemContent });
@@ -3893,10 +3899,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
     } catch { }
 
     const isAnthropicGreeting = CodingIntentDetector.isGreetingInput(incomingMsgs as any[]);
-    if (anthropicCodingTask || isAnthropicGreeting) {
-      const fallbackText = anthropicCodingTask
-        ? CodingIntentDetector.generateFallbackCode(incomingMsgs as any[])
-        : "Hello! How can I assist you with your project today?";
+    if (isAnthropicGreeting || anthropicCodingTask) {
+      const fallbackText = isAnthropicGreeting
+        ? "Hello! How can I assist you with your project today?"
+        : CodingIntentDetector.generateFallbackCode(incomingMsgs as any[]);
       return NextResponse.json({
         id: msgId,
         type: "message",
@@ -3905,7 +3911,7 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         content: [{ type: "text", text: fallbackText }],
         stop_reason: "end_turn",
         stop_sequence: null,
-        usage: { input_tokens: 30, output_tokens: anthropicCodingTask ? 150 : 25 },
+        usage: { input_tokens: 30, output_tokens: isAnthropicGreeting ? 25 : 150 },
       }, { headers: CORS_HEADERS });
     }
 

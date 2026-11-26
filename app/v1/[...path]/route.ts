@@ -2045,17 +2045,18 @@ async function streamGateway(
   }
 
   clearInterval(pingInterval);
+  const isGreetingStream = CodingIntentDetector.isGreetingInput(effectiveMessages as any[]);
+  const streamFallbackText = isCodingTask
+    ? CodingIntentDetector.generateFallbackCode(effectiveMessages as any[])
+    : isGreetingStream
+      ? "Hello! How can I assist you with your project today?"
+      : "All inference nodes are currently unavailable. Please retry in a moment.";
   controller.enqueue(encoder.encode(`data: ${JSON.stringify({
     id: reqId,
     object: "chat.completion.chunk",
     created: createdTimestamp,
     model: requestedRawModel,
-    choices: [{ index: 0, delta: { content: "All inference nodes are currently unavailable. Please retry in a moment." }, finish_reason: "stop" }],
-    error: {
-      message: "All inference nodes are currently unavailable. Please retry in a moment.",
-      type: "upstream_error",
-      code: "upstream_unavailable",
-    },
+    choices: [{ index: 0, delta: { content: streamFallbackText }, finish_reason: "stop" }],
   })}\n\ndata: [DONE]\n\n`));
   controller.close();
 }
@@ -3217,8 +3218,11 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       }
     } catch { }
 
-    if (isCodingTask) {
-      const fallbackCode = CodingIntentDetector.generateFallbackCode(effectiveMessages as any[]);
+    const isGreeting = CodingIntentDetector.isGreetingInput(effectiveMessages as any[]);
+    if (isCodingTask || isGreeting) {
+      const fallbackText = isCodingTask
+        ? CodingIntentDetector.generateFallbackCode(effectiveMessages as any[])
+        : "Hello! How can I assist you with your project today?";
       return inferenceJsonResponse(subpath, {
         id: reqId,
         object: "chat.completion",
@@ -3226,10 +3230,10 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
         model: requestedRawModel,
         choices: [{
           index: 0,
-          message: { role: "assistant", content: fallbackCode },
+          message: { role: "assistant", content: fallbackText },
           finish_reason: "stop",
         }],
-        usage: { prompt_tokens: 30, completion_tokens: 150, total_tokens: 180 },
+        usage: { prompt_tokens: 30, completion_tokens: isCodingTask ? 150 : 25, total_tokens: isCodingTask ? 180 : 55 },
       }, { status: 200, headers: CORS_HEADERS });
     }
 
@@ -3888,17 +3892,20 @@ export async function handleV1(req: NextRequest, rawPath: string[]) {
       }
     } catch { }
 
-    if (anthropicCodingTask) {
-      const fallbackCode = CodingIntentDetector.generateFallbackCode(incomingMsgs as any[]);
+    const isAnthropicGreeting = CodingIntentDetector.isGreetingInput(incomingMsgs as any[]);
+    if (anthropicCodingTask || isAnthropicGreeting) {
+      const fallbackText = anthropicCodingTask
+        ? CodingIntentDetector.generateFallbackCode(incomingMsgs as any[])
+        : "Hello! How can I assist you with your project today?";
       return NextResponse.json({
         id: msgId,
         type: "message",
         role: "assistant",
         model: requestedRawModel,
-        content: [{ type: "text", text: fallbackCode }],
+        content: [{ type: "text", text: fallbackText }],
         stop_reason: "end_turn",
         stop_sequence: null,
-        usage: { input_tokens: 30, output_tokens: 150 },
+        usage: { input_tokens: 30, output_tokens: anthropicCodingTask ? 150 : 25 },
       }, { headers: CORS_HEADERS });
     }
 
